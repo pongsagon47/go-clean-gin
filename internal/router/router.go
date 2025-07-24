@@ -3,6 +3,7 @@ package router
 import (
 	"go-clean-gin/internal/container"
 	"go-clean-gin/internal/middleware"
+	"go-clean-gin/pkg/response"
 
 	"github.com/gin-gonic/gin"
 )
@@ -21,13 +22,22 @@ func SetupRouter(container *container.Container) *gin.Engine {
 	router.Use(middleware.CORS())
 	router.Use(middleware.Recovery())
 	router.Use(middleware.Logging())
+	router.Use(middleware.ErrorHandler()) // Add error handler middleware
 
 	// Health check endpoint
 	router.GET("/health", func(c *gin.Context) {
-		c.JSON(200, gin.H{
+		response.Success(c, 200, "Server is running", gin.H{
 			"status":  "OK",
-			"message": "Server is running",
 			"version": "1.0.0",
+			"env":     container.Config.Env,
+		})
+	})
+
+	// 404 handler
+	router.NoRoute(func(c *gin.Context) {
+		response.Error(c, 404, "NOT_FOUND", "Route not found", gin.H{
+			"path":   c.Request.URL.Path,
+			"method": c.Request.Method,
 		})
 	})
 

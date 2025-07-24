@@ -2,8 +2,8 @@ package product
 
 import (
 	"context"
-	"fmt"
 	"go-clean-gin/internal/entity"
+	"go-clean-gin/pkg/errors"
 	"go-clean-gin/pkg/logger"
 
 	"github.com/google/uuid"
@@ -34,14 +34,14 @@ func (u *productUsecase) CreateProduct(ctx context.Context, req *entity.CreatePr
 
 	if err := u.repo.CreateProduct(ctx, product); err != nil {
 		logger.Error("Failed to create product", zap.Error(err))
-		return nil, fmt.Errorf("failed to create product: %w", err)
+		return nil, errors.Wrap(err, errors.ErrInternal, "Failed to create product", 500)
 	}
 
 	// Get the created product with user data
 	createdProduct, err := u.repo.GetProductByID(ctx, product.ID)
 	if err != nil {
 		logger.Error("Failed to get created product", zap.Error(err))
-		return nil, fmt.Errorf("failed to get created product: %w", err)
+		return nil, errors.Wrap(err, errors.ErrInternal, "Failed to get created product", 500)
 	}
 
 	logger.Info("Product created successfully", zap.String("product_id", product.ID.String()))
@@ -52,10 +52,10 @@ func (u *productUsecase) GetProductByID(ctx context.Context, productID uuid.UUID
 	product, err := u.repo.GetProductByID(ctx, productID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("product not found")
+			return nil, errors.ErrProductNotFoundError
 		}
 		logger.Error("Failed to get product", zap.Error(err))
-		return nil, fmt.Errorf("failed to get product: %w", err)
+		return nil, errors.Wrap(err, errors.ErrInternal, "Failed to get product", 500)
 	}
 
 	return product, nil
@@ -76,7 +76,7 @@ func (u *productUsecase) GetProducts(ctx context.Context, filter *entity.Product
 	products, total, err := u.repo.GetProducts(ctx, filter)
 	if err != nil {
 		logger.Error("Failed to get products", zap.Error(err))
-		return nil, 0, fmt.Errorf("failed to get products: %w", err)
+		return nil, 0, errors.Wrap(err, errors.ErrInternal, "Failed to get products", 500)
 	}
 
 	return products, total, nil
@@ -87,15 +87,15 @@ func (u *productUsecase) UpdateProduct(ctx context.Context, productID uuid.UUID,
 	existingProduct, err := u.repo.GetProductByID(ctx, productID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return nil, fmt.Errorf("product not found")
+			return nil, errors.ErrProductNotFoundError
 		}
 		logger.Error("Failed to get product for update", zap.Error(err))
-		return nil, fmt.Errorf("failed to get product: %w", err)
+		return nil, errors.Wrap(err, errors.ErrInternal, "Failed to get product", 500)
 	}
 
 	// Check if user is the owner of the product
 	if existingProduct.CreatedBy != userID {
-		return nil, fmt.Errorf("unauthorized: you can only update your own products")
+		return nil, errors.ErrInvalidOwnerError
 	}
 
 	// Update fields if provided
@@ -120,7 +120,7 @@ func (u *productUsecase) UpdateProduct(ctx context.Context, productID uuid.UUID,
 
 	if err := u.repo.UpdateProduct(ctx, existingProduct); err != nil {
 		logger.Error("Failed to update product", zap.Error(err))
-		return nil, fmt.Errorf("failed to update product: %w", err)
+		return nil, errors.Wrap(err, errors.ErrInternal, "Failed to update product", 500)
 	}
 
 	logger.Info("Product updated successfully", zap.String("product_id", productID.String()))
@@ -132,20 +132,20 @@ func (u *productUsecase) DeleteProduct(ctx context.Context, productID uuid.UUID,
 	existingProduct, err := u.repo.GetProductByID(ctx, productID)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
-			return fmt.Errorf("product not found")
+			return errors.ErrProductNotFoundError
 		}
 		logger.Error("Failed to get product for deletion", zap.Error(err))
-		return fmt.Errorf("failed to get product: %w", err)
+		return errors.Wrap(err, errors.ErrInternal, "Failed to get product", 500)
 	}
 
 	// Check if user is the owner of the product
 	if existingProduct.CreatedBy != userID {
-		return fmt.Errorf("unauthorized: you can only delete your own products")
+		return errors.ErrInvalidOwnerError
 	}
 
 	if err := u.repo.DeleteProduct(ctx, productID); err != nil {
 		logger.Error("Failed to delete product", zap.Error(err))
-		return fmt.Errorf("failed to delete product: %w", err)
+		return errors.Wrap(err, errors.ErrInternal, "Failed to delete product", 500)
 	}
 
 	logger.Info("Product deleted successfully", zap.String("product_id", productID.String()))
