@@ -18,12 +18,16 @@ type Config struct {
 }
 
 type DatabaseConfig struct {
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Name     string
-	SSLMode  string
+	Host            string
+	Port            int
+	User            string
+	Password        string
+	Name            string
+	SSLMode         string
+	LogLevel        string // 🆕 เพิ่มใหม่ - สำหรับ GORM logging
+	MaxIdleConns    int    // 🆕 เพิ่มใหม่ - connection pool
+	MaxOpenConns    int    // 🆕 เพิ่มใหม่ - connection pool
+	ConnMaxLifetime int    // 🆕 เพิ่มใหม่ - connection lifetime (minutes)
 }
 
 type ServerConfig struct {
@@ -51,16 +55,20 @@ func Load() *Config {
 
 	return &Config{
 		Database: DatabaseConfig{
-			Host:     getEnv("DB_HOST", "localhost"),
-			Port:     getEnvAsInt("DB_PORT", 5432),
-			User:     getEnv("DB_USER", "postgres"),
-			Password: getEnv("DB_PASSWORD", "password"),
-			Name:     getEnv("DB_NAME", "go_clean_gin"),
-			SSLMode:  getEnv("DB_SSLMODE", "disable"),
+			Host:            getEnv("DB_HOST", "localhost"),
+			Port:            getEnvAsInt("DB_PORT", 5432),
+			User:            getEnv("DB_USER", "postgres"),
+			Password:        getEnv("DB_PASSWORD", "password"),
+			Name:            getEnv("DB_NAME", "go_clean_gin"),
+			SSLMode:         getEnv("DB_SSLMODE", "disable"),
+			LogLevel:        getEnv("DB_LOG_LEVEL", "warn"),          // 🆕 เพิ่มใหม่
+			MaxIdleConns:    getEnvAsInt("DB_MAX_IDLE_CONNS", 10),    // 🆕 เพิ่มใหม่
+			MaxOpenConns:    getEnvAsInt("DB_MAX_OPEN_CONNS", 100),   // 🆕 เพิ่มใหม่
+			ConnMaxLifetime: getEnvAsInt("DB_CONN_MAX_LIFETIME", 60), // 🆕 เพิ่มใหม่ (60 นาที)
 		},
 		Server: ServerConfig{
 			Host:         getEnv("SERVER_HOST", "0.0.0.0"),
-			Port:         getEnvAsInt("SERVER_PORT", 8080),
+			Port:         getEnvAsInt("SERVER_PORT", 8080), // 👆 เก็บ 8080 ตามเดิม
 			ReadTimeout:  getEnvAsDuration("SERVER_READ_TIMEOUT", 30*time.Second),
 			WriteTimeout: getEnvAsDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
 		},

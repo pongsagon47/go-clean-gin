@@ -6,24 +6,29 @@
 *.dylib
 bin/
 dist/
+tmp/
 
 # Test binary, built with `go test -c`
 *.test
 
 # Output of the go coverage tool
 *.out
+coverage/
 coverage.html
+coverage.txt
 
-# Dependency directories (remove the comment below to include it)
+# Dependency directories
 vendor/
 
 # Go workspace file
 go.work
+go.work.sum
 
 # Environment variables
 .env
 .env.local
 .env.production
+.env.test
 
 # IDE files
 .vscode/
@@ -50,3 +55,22 @@ logs/
 
 # Air (hot reload)
 tmp/
+build-errors.log
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Profiling files
+*.prof
+cpu.prof
+mem.prof
+trace.out
+
+# Documentation
+docs/_build/
+
+# Temporary files
+*.tmp
+*.temp

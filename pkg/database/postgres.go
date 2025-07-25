@@ -25,12 +25,27 @@ func NewPostgresDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 		cfg.SSLMode,
 	)
 
-	// Configure GORM logger
+	// Configure GORM logger based on config 🆕
+	var logLevel gormLogger.LogLevel
+	switch cfg.LogLevel {
+	case "debug":
+		logLevel = gormLogger.Info
+	case "info":
+		logLevel = gormLogger.Warn
+	case "warn":
+		logLevel = gormLogger.Error
+	default:
+		logLevel = gormLogger.Error
+	}
+
+	// Configure GORM - ปรับปรุงจากเดิม 🔧
 	gormConfig := &gorm.Config{
-		Logger: gormLogger.Default.LogMode(gormLogger.Info),
+		Logger: gormLogger.Default.LogMode(logLevel), // 🆕 ใช้ dynamic log level
 		NowFunc: func() time.Time {
 			return time.Now().UTC()
 		},
+		DisableForeignKeyConstraintWhenMigrating: false, // 🆕 เพิ่ม FK support
+		CreateBatchSize:                          1000,  // 🆕 ปรับปรุง performance
 	}
 
 	db, err := gorm.Open(postgres.Open(dsn), gormConfig)
@@ -46,10 +61,10 @@ func NewPostgresDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	// Configure connection pool
-	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(100)
-	sqlDB.SetConnMaxLifetime(time.Hour)
+	// Configure connection pool - ใช้ settings จาก config 🆕
+	sqlDB.SetMaxIdleConns(cfg.MaxIdleConns)
+	sqlDB.SetMaxOpenConns(cfg.MaxOpenConns)
+	sqlDB.SetConnMaxLifetime(time.Duration(cfg.ConnMaxLifetime) * time.Minute)
 
 	// Test connection
 	if err := sqlDB.Ping(); err != nil {
@@ -57,7 +72,14 @@ func NewPostgresDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 		return nil, err
 	}
 
-	logger.Info("Successfully connected to PostgreSQL database")
+	// ปรับปรุง logging ให้มีข้อมูลมากขึ้น 🆕
+	logger.Info("Successfully connected to PostgreSQL database",
+		zap.String("host", cfg.Host),
+		zap.Int("port", cfg.Port),
+		zap.String("database", cfg.Name),
+		zap.Int("max_idle_conns", cfg.MaxIdleConns),
+		zap.Int("max_open_conns", cfg.MaxOpenConns))
+
 	return db, nil
 }
 
@@ -102,8 +124,26 @@ func SeedData(db *gorm.DB) error {
 		}
 
 		logger.Info("Admin user created successfully")
+	} else {
+		logger.Info("Admin user already exists, skipping creation") // 🆕 เพิ่ม log
 	}
 
 	logger.Info("Database seeding completed")
+	return nil
+}
+
+// 🆕 เพิ่ม utility functions ใหม่
+
+// HealthCheck - ตรวจสอบการเชื่อมต่อ database
+func HealthCheck(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("failed to get underlying sql.DB: %w", err)
+	}
+
+	if err := sqlDB.Ping(); err != nil {
+		return fmt.Errorf("database ping failed: %w", err)
+	}
+
 	return nil
 }
