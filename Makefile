@@ -1,4 +1,4 @@
-.PHONY: build run test clean docker-build docker-run migrate seed dev help install setup check-port kill-port dev-force air
+.PHONY: build run dev test clean docker-build docker-run help install setup
 
 # Variables
 APP_NAME=go-clean-gin
@@ -18,7 +18,6 @@ install-tools:
 	@echo "Installing development tools..."
 	@go install github.com/githubnemo/CompileDaemon@latest || echo "CompileDaemon installation failed"
 	@go install github.com/air-verse/air@latest || go install github.com/cosmtrek/air@v1.49.0 || echo "Air installation failed"
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest || echo "golangci-lint installation failed"
 
 ## Setup project (first time)
 setup: install install-tools
@@ -49,14 +48,6 @@ kill-port:
 	echo "Killing processes on port $$PORT..."; \
 	sudo lsof -t -i:$$PORT | xargs kill -9 2>/dev/null || echo "No processes found on port $$PORT"
 
-## Install Air for hot reload
-air:
-	@echo "Trying to install Air..."
-	@go install github.com/air-verse/air@latest || \
-	 go install github.com/cosmtrek/air@v1.49.0 || \
-	 go install github.com/githubnemo/CompileDaemon@latest || \
-	 echo "Hot reload tools installation failed"
-
 ## Run the application with hot reload
 dev: check-port
 	@if [ -f "$(shell go env GOPATH)/bin/air" ]; then \
@@ -66,10 +57,6 @@ dev: check-port
 	elif command -v CompileDaemon >/dev/null 2>&1; then \
 		echo "Using CompileDaemon for hot reload..."; \
 		CompileDaemon -command="./$(APP_NAME)" -build="go build -o $(APP_NAME) cmd/main.go"; \
-	elif [ -f scripts/dev.sh ]; then \
-		echo "Using custom hot reload script..."; \
-		chmod +x scripts/dev.sh; \
-		./scripts/dev.sh; \
 	else \
 		echo "No hot reload available, running normally..."; \
 		go run cmd/main.go; \
@@ -79,8 +66,8 @@ dev: check-port
 dev-force: kill-port dev
 
 ## Run without hot reload
-dev-simple:
-	@echo "Running without hot reload..."
+run:
+	@echo "Running application..."
 	go run cmd/main.go
 
 ## Build the application
@@ -88,19 +75,6 @@ build:
 	@echo "Building application..."
 	@mkdir -p bin
 	go build -o bin/$(APP_NAME) cmd/main.go
-
-## Build for multiple platforms
-build-all:
-	@echo "Building for multiple platforms..."
-	@mkdir -p bin
-	GOOS=linux GOARCH=amd64 go build -o bin/$(APP_NAME)-linux cmd/main.go
-	GOOS=windows GOARCH=amd64 go build -o bin/$(APP_NAME)-windows.exe cmd/main.go
-	GOOS=darwin GOARCH=amd64 go build -o bin/$(APP_NAME)-darwin cmd/main.go
-	@echo "✅ Multi-platform build completed!"
-
-## Run the application
-run: build
-	./bin/$(APP_NAME)
 
 ## Run tests
 test:
@@ -110,22 +84,10 @@ test:
 ## Run tests with coverage
 test-coverage:
 	@echo "Running tests with coverage..."
-	@chmod +x scripts/test.sh
-	@./scripts/test.sh
-
-## Run integration tests
-test-integration:
-	@echo "Running integration tests..."
-	@if [ -f test/integration_test.go ]; then \
-		go test -v -tags=integration ./test/...; \
-	else \
-		echo "No integration tests found"; \
-	fi
-
-## Run specific test
-test-unit:
-	@echo "Running unit tests only..."
-	go test -v -short ./internal/...
+	go test -v -race -coverprofile=coverage.out ./...
+	go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report generated: coverage.html"
+	go tool cover -func=coverage.out
 
 ## Clean build artifacts
 clean:
@@ -140,43 +102,10 @@ fmt:
 	@echo "Formatting code..."
 	go fmt ./...
 
-## Run golangci-lint
-lint:
-	@echo "Running linter..."
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run; \
-	else \
-		echo "golangci-lint not found. Run 'make install-tools' first"; \
-	fi
-
-## Fix linting issues
-lint-fix:
-	@echo "Fixing linting issues..."
-	@if command -v golangci-lint >/dev/null 2>&1; then \
-		golangci-lint run --fix; \
-	else \
-		echo "golangci-lint not found. Run 'make install-tools' first"; \
-	fi
-
 ## Tidy dependencies
 tidy:
 	@echo "Tidying dependencies..."
 	go mod tidy
-
-## Update dependencies
-update:
-	@echo "Updating dependencies..."
-	go get -u ./...
-	go mod tidy
-
-## Security check
-security:
-	@echo "Running security check..."
-	@if command -v gosec >/dev/null 2>&1; then \
-		gosec ./...; \
-	else \
-		echo "gosec not found. Install with: go install github.com/securecodewarrior/gosec/v2/cmd/gosec@latest"; \
-	fi
 
 ## Build Docker image
 docker-build:
@@ -197,56 +126,38 @@ docker-stop:
 docker-logs:
 	docker compose logs -f
 
-## Restart Docker containers
-docker-restart: docker-stop docker-run
-
-## Database migration (placeholder)
-migrate:
-	@echo "Running database migrations..."
-	@echo "Implement your migration logic here"
-
-## Seed database (placeholder)
-seed:
-	@echo "Seeding database..."
-	@echo "Implement your seeding logic here"
-
-## Generate API documentation (placeholder)
-docs:
-	@echo "Generating API documentation..."
-	@echo "Implement documentation generation here"
-
 ## Health check
 health:
 	@echo "Checking application health..."
 	@curl -f http://localhost:$(SERVER_PORT)/health || echo "Health check failed"
 
-## Show application logs
-logs:
-	@if [ -f logs/app.log ]; then \
-		tail -f logs/app.log; \
-	else \
-		echo "No log file found"; \
-	fi
-
-## Benchmark tests
-benchmark:
-	@echo "Running benchmark tests..."
-	go test -bench=. -benchmem ./...
-
-## Profile CPU
-profile-cpu:
-	@echo "Running CPU profiling..."
-	go test -cpuprofile=cpu.prof -bench=. ./...
-	go tool pprof cpu.prof
-
-## Profile memory
-profile-mem:
-	@echo "Running memory profiling..."
-	go test -memprofile=mem.prof -bench=. ./...
-	go tool pprof mem.prof
-
 ## Show help
 help:
 	@echo "🚀 Go Clean Gin API - Available commands:"
 	@echo ""
-	@grep -E '^##' $(MAKEFILE_LIST) | sed 's/##//g' | sort
+	@echo "Development:"
+	@echo "  setup          Setup project (first time)"
+	@echo "  dev            Run with hot reload"
+	@echo "  dev-force      Kill port conflicts and run"
+	@echo "  run            Run without hot reload"
+	@echo ""
+	@echo "Building & Testing:"
+	@echo "  build          Build application"
+	@echo "  test           Run tests"
+	@echo "  test-coverage  Run tests with coverage"
+	@echo ""
+	@echo "Code Quality:"
+	@echo "  fmt            Format code"
+	@echo "  tidy           Tidy dependencies"
+	@echo "  clean          Clean build artifacts"
+	@echo ""
+	@echo "Docker:"
+	@echo "  docker-build   Build Docker image"
+	@echo "  docker-run     Start containers"
+	@echo "  docker-stop    Stop containers"
+	@echo "  docker-logs    View container logs"
+	@echo ""
+	@echo "Utilities:"
+	@echo "  check-port     Check if port is available"
+	@echo "  kill-port      Kill processes on port"
+	@echo "  health         Check application health"

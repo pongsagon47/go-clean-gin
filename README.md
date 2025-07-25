@@ -1,21 +1,21 @@
 # Go Clean Gin API
 
-A RESTful API built with Go, Gin framework following Clean Architecture principles with standardized response and error handling system.
+A production-ready RESTful API built with Go, Gin framework following Clean Architecture principles with advanced error handling and standardized response system.
 
 ## 🚀 Features
 
 - 🏗️ **Clean Architecture** (Entity, Repository, Usecase, Handler)
 - 🔐 **JWT Authentication** with secure token validation
-- 🐘 **PostgreSQL Database** with GORM
-- 🔄 **Database Migrations** with version control
-- 📝 **Request Validation** with detailed error messages
+- 🐘 **PostgreSQL Database** with GORM and connection pooling
+- 📝 **Advanced Request Validation** with custom error messages
 - 🐳 **Docker Support** with docker-compose
-- 📊 **Structured Logging** with Zap
+- 📊 **Structured Logging** with Zap (JSON/Development formats)
 - ⚡ **Hot Reload** with Air/CompileDaemon
-- 🧪 **Testing Ready** with unit and integration tests
-- 📋 **Standardized API Responses** with pagination
-- ⚠️ **Advanced Error Handling** with custom error codes
-- 🔍 **Input Validation** with field-specific messages
+- 🧪 **Unit Testing** ready with comprehensive test structure
+- 📋 **Standardized API Responses** with pagination support
+- ⚠️ **Professional Error Handling** with custom error codes
+- 🔍 **Enhanced Input Validation** with field-specific messages
+- 🔧 **Database Connection Pooling** with custom configuration
 
 ## 📁 Project Structure
 
@@ -27,6 +27,8 @@ go-clean-gin/
 │   └── config.go              # Configuration management
 ├── internal/
 │   ├── entity/                # Domain entities (User, Product)
+│   │   ├── user.go
+│   │   └── product.go
 │   ├── auth/                  # Authentication module
 │   │   ├── handler.go         # HTTP handlers
 │   │   ├── usecase.go         # Business logic
@@ -49,23 +51,22 @@ go-clean-gin/
 │       └── container.go      # DI container
 ├── pkg/
 │   ├── database/              # Database connection
-│   │   └── postgres.go       # PostgreSQL setup
+│   │   └── postgres.go       # PostgreSQL setup with pooling
 │   ├── errors/                # Custom error system
-│   │   └── errors.go         # Application errors
+│   │   └── errors.go         # Application-specific errors
 │   ├── logger/                # Logging utilities
-│   │   └── logger.go         # Zap logger setup
+│   │   └── logger.go         # Zap logger with levels
 │   ├── response/              # Response system
-│   │   └── response.go       # Standardized responses
+│   │   └── response.go       # Standardized API responses
 │   └── validator/             # Input validation
-│       └── validator.go      # Custom validators
+│       └── validator.go      # Custom validation messages
 ├── scripts/
-│   └── test.sh               # Test runner script
-├── test/
-│   └── integration_test.go   # Integration tests
+│   └── test.sh               # Enhanced test runner
 ├── tmp/                      # Temporary files (hot reload)
 ├── .env                      # Environment variables
 ├── .env.example             # Example environment file
 ├── .gitignore               # Git ignore rules
+├── .golangci.yml            # Linter configuration
 ├── docker-compose.yml       # Docker composition
 ├── Dockerfile               # Docker image definition
 ├── go.mod                   # Go module definition
@@ -120,7 +121,7 @@ make docker-run
 make dev
 
 # Or simple run
-make dev-simple
+make run
 ```
 
 ### Using Docker
@@ -305,55 +306,58 @@ GET /health
 - `INSUFFICIENT_STOCK` - Not enough stock available
 - `INVALID_OWNER` - User can only modify own resources
 
+### Handler Architecture
+
+#### Response System (`pkg/response/`)
+
+- **Unified Response Structure**: All endpoints return consistent JSON format
+- **Success Responses**: `Success()` and `SuccessWithMeta()` functions
+- **Error Responses**: `Error()` and `ValidationError()` functions
+- **Pagination Support**: Built-in pagination metadata generation
+
+#### Error System (`pkg/errors/`)
+
+- **Application Errors**: Custom `AppError` type with codes and HTTP status
+- **Error Wrapping**: Wrap underlying errors with application context
+- **Predefined Errors**: Common error instances ready to use
+- **Error Details**: Support for additional error information
+
+#### Validation System (`pkg/validator/`)
+
+- **Enhanced Validation**: Better error messages with field names
+- **Custom Messages**: Tailored validation messages for each rule
+- **Field Mapping**: JSON field names in error messages
+- **Struct Validation**: Comprehensive request validation
+
 ## 🛠️ Development Commands
 
 ```bash
-# Setup & Installation
+# Setup & Development
 make setup              # First-time project setup
-make install            # Install dependencies
-make install-tools      # Install development tools
-
-# Development
 make dev                # Run with hot reload
-make dev-simple         # Run without hot reload
 make dev-force          # Kill port conflicts and run
+make run                # Run without hot reload
 
-# Building
-make build              # Build for current platform
-make build-all          # Build for multiple platforms
-make run                # Run built binary
-
-# Testing
-make test               # Run all tests
+# Building & Testing
+make build              # Build application
+make test               # Run unit tests
 make test-coverage      # Run tests with coverage
-make test-integration   # Run integration tests
-make test-unit          # Run unit tests only
 
 # Code Quality
 make fmt                # Format code
-make lint               # Run linter
-make lint-fix           # Fix linting issues
-make security           # Security check
+make tidy               # Tidy dependencies
+make clean              # Clean build artifacts
 
 # Docker
 make docker-build       # Build Docker image
 make docker-run         # Start containers
 make docker-stop        # Stop containers
-make docker-logs        # View logs
+make docker-logs        # View container logs
 
 # Utilities
-make clean              # Clean build artifacts
-make tidy               # Tidy dependencies
-make update             # Update dependencies
-make health             # Check app health
-make logs               # View application logs
-
-# Performance
-make benchmark          # Run benchmark tests
-make profile-cpu        # CPU profiling
-make profile-mem        # Memory profiling
-
-# Help
+make check-port         # Check if port is available
+make kill-port          # Kill processes on port
+make health             # Check application health
 make help               # Show all commands
 ```
 
@@ -365,12 +369,6 @@ make test
 
 # Run tests with coverage
 make test-coverage
-
-# Run integration tests
-make test-integration
-
-# Run benchmark tests
-make benchmark
 ```
 
 ## 🔧 Configuration
@@ -385,10 +383,10 @@ DB_USER=postgres
 DB_PASSWORD=password
 DB_NAME=go_clean_gin
 DB_SSLMODE=disable
-SERVER_PORT=8080
-SERVER_HOST=0.0.0.0
-SERVER_READ_TIMEOUT=30s
-SERVER_WRITE_TIMEOUT=30s
+DB_LOG_LEVEL=warn
+DB_MAX_IDLE_CONNS=10
+DB_MAX_OPEN_CONNS=100
+DB_CONN_MAX_LIFETIME=60
 
 # Server
 SERVER_PORT=8080
@@ -433,17 +431,24 @@ This project follows **Clean Architecture** principles:
 - **Repository Pattern** - Data access abstraction
 - **Dependency Injection** - Loose coupling
 - **Middleware Pattern** - Cross-cutting concerns
-- **Error Handling** - Centralized error management
+- **Standardized Error Handling** - Centralized error management
+- **Response Standardization** - Consistent API responses
+
+### Advanced Features
+
+- **Connection Pooling** - Optimized database performance
+- **Structured Logging** - Production-ready logging with Zap
+- **Custom Validation** - Enhanced validation with detailed messages
+- **Error Wrapping** - Comprehensive error tracking and debugging
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Run tests (`make test`)
-4. Run linter (`make lint`)
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+4. Commit your changes (`git commit -m 'Add amazing feature'`)
+5. Push to the branch (`git push origin feature/amazing-feature`)
+6. Open a Pull Request
 
 ## 📝 License
 
@@ -464,7 +469,7 @@ make dev-force  # Force run (kills port first)
 
 ```bash
 make install-tools  # Install Air/CompileDaemon
-make dev-simple     # Run without hot reload
+make run           # Run without hot reload
 ```
 
 #### Database Connection Issues
