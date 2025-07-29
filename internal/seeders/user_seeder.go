@@ -92,6 +92,11 @@ func (s *UserSeeder) Name() string {
 	return "UserSeeder"
 }
 
+// Dependencies returns list of seeders that must run before this seeder
+func (s *UserSeeder) Dependencies() []string {
+	return []string{} // UserSeeder ไม่มี dependencies
+}
+
 // Auto-register seeder
 func init() {
 	Register(&UserSeeder{})

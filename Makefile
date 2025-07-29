@@ -1,7 +1,7 @@
 # Final Complete Makefile for Go Clean Gin with Laravel-style Commands
 .PHONY: build run dev test clean docker-build docker-run help install setup
 .PHONY: artisan make-migration make-seeder make-entity make-package make-model
-.PHONY: migrate migrate-rollback migrate-status migrate-fresh db-seed build-artisan
+.PHONY: migrate migrate-rollback migrate-status migrate-fresh db-seed db-seed-list db-seed-specific build-artisan
 .PHONY: add-column drop-column add-index db-create db-drop db-reset db-info
 .PHONY: list-migrations validate-migrations init-migrations examples
 
@@ -153,16 +153,18 @@ make-migration:
 make-seeder:
 	@if [ -z "$(NAME)" ]; then \
 		echo "❌ Error: NAME is required"; \
-		echo "Usage: make make-seeder NAME=SeederName [TABLE=table_name]"; \
+		echo "Usage: make make-seeder NAME=SeederName [TABLE=table_name] [DEPS=\"Seeder1,Seeder2\"]"; \
 		echo ""; \
 		echo "Examples:"; \
 		echo "  make make-seeder NAME=UserSeeder TABLE=users"; \
-		echo "  make make-seeder NAME=ProductSeeder"; \
+		echo "  make make-seeder NAME=ProductSeeder TABLE=products DEPS=\"UserSeeder\""; \
+		echo "  make make-seeder NAME=OrderSeeder DEPS=\"UserSeeder,ProductSeeder\""; \
 		exit 1; \
 	fi
 	@echo "🌱 Creating seeder: $(NAME)"
 	@$(ARTISAN_CMD) -action=make:seeder -name="$(NAME)" \
-		$(if $(TABLE),-table="$(TABLE)")
+		$(if $(TABLE),-table="$(TABLE)") \
+		$(if $(DEPS),-deps="$(DEPS)")
 
 ## Create new entity/model file
 make-entity:
@@ -253,7 +255,27 @@ migrate-fresh:
 
 ## Run database seeders
 db-seed:
+	@echo "🌱 Running seeders with dependency resolution..."
 	@$(ARTISAN_CMD) -action=db:seed $(if $(NAME),-name=$(NAME))
+
+## List all seeders with their dependencies
+db-seed-list:
+	@echo "📋 Listing all registered seeders with dependencies..."
+	@$(ARTISAN_CMD) -action=db:seed -name=list
+
+## Run specific seeder with its dependencies
+db-seed-specific:
+	@if [ -z "$(NAME)" ]; then \
+		echo "❌ Error: NAME is required"; \
+		echo "Usage: make db-seed-specific NAME=SeederName"; \
+		echo ""; \
+		echo "Example:"; \
+		echo "  make db-seed-specific NAME=ProductSeeder"; \
+		echo "  # This will run UserSeeder first, then ProductSeeder"; \
+		exit 1; \
+	fi
+	@echo "🌱 Running seeder: $(NAME) (with dependencies)"
+	@$(ARTISAN_CMD) -action=db:seed -name=$(NAME)
 
 # =============================================================================
 # Laravel-style Shortcuts for Common Operations
@@ -449,41 +471,59 @@ examples:
 	@echo "  make add-index TABLE=products COLUMNS=\"category,price\""
 	@echo "  make drop-column TABLE=users COLUMN=old_field"
 	@echo ""
-	@echo "🌱 Seeding & Migration:"
-	@echo "  make make-seeder NAME=PostSeeder TABLE=posts"
+	@echo "🌱 Seeding & Migration (with Dependencies):"
+	@echo "  # Create seeders with dependencies"
+	@echo "  make make-seeder NAME=UserSeeder TABLE=users"
+	@echo "  make make-seeder NAME=ProductSeeder TABLE=products DEPS=\"UserSeeder\""
+	@echo "  make make-seeder NAME=OrderSeeder DEPS=\"UserSeeder,ProductSeeder\""
+	@echo ""
+	@echo "  # Run seeders (automatic dependency resolution)"
+	@echo "  make db-seed                   # Run all seeders in correct order"
+	@echo "  make db-seed-list              # Show all seeders with dependencies"
+	@echo "  make db-seed-specific NAME=ProductSeeder  # Run ProductSeeder (+ UserSeeder first)"
+	@echo ""
+	@echo "  # Migration management"
 	@echo "  make migrate                   # Run pending migrations"
 	@echo "  make migrate-status            # Show status"
 	@echo "  make migrate-rollback          # Rollback last migration"
 	@echo "  make migrate-rollback COUNT=3  # Rollback last 3 migrations"
-	@echo "  make db-seed                   # Run all seeders"
-	@echo "  make db-seed NAME=PostSeeder   # Run specific seeder"
 	@echo ""
 	@echo "🔄 Database Management:"
 	@echo "  make db-create                 # Create database"
 	@echo "  make db-reset                  # Complete reset"
 	@echo "  make migrate-fresh             # Fresh migration (DANGER!)"
 	@echo ""
-	@echo "📁 Complete Workflow Example:"
+	@echo "📁 Complete Workflow Example with Dependencies:"
 	@echo "  # 1. Setup project"
 	@echo "  make setup"
 	@echo "  make build-artisan"
 	@echo ""
-	@echo "  # 2. Create blog features"
-	@echo "  make make-model NAME=Post FIELDS=\"title:string,content:text,author_id:uuid\""
-	@echo "  make make-model NAME=Comment FIELDS=\"post_id:uuid,content:text,author_id:uuid\""
-	@echo "  make make-package NAME=Post"
-	@echo "  make make-package NAME=Comment"
+	@echo "  # 2. Create models with proper seeder dependencies"
+	@echo "  make make-model NAME=User FIELDS=\"name:string,email:string\""
+	@echo "  make make-model NAME=Category FIELDS=\"name:string,description:text\""
+	@echo "  make make-model NAME=Product FIELDS=\"name:string,price:decimal,category_id:uuid\""
 	@echo ""
-	@echo "  # 3. Add relationships and indexes"
-	@echo "  make add-index TABLE=posts COLUMNS=\"author_id,created_at\""
-	@echo "  make add-index TABLE=comments COLUMNS=\"post_id\""
+	@echo "  # 3. Create seeders with dependencies"
+	@echo "  make make-seeder NAME=UserSeeder TABLE=users"
+	@echo "  make make-seeder NAME=CategorySeeder TABLE=categories"
+	@echo "  make make-seeder NAME=ProductSeeder TABLE=products DEPS=\"UserSeeder,CategorySeeder\""
 	@echo ""
-	@echo "  # 4. Deploy"
+	@echo "  # 4. Deploy (seeders will run in correct order automatically)"
 	@echo "  make migrate"
-	@echo "  make db-seed"
+	@echo "  make db-seed    # UserSeeder → CategorySeeder → ProductSeeder"
 	@echo "  make dev"
+	@echo ""
+	@echo "📊 Seeder Dependency Examples:"
+	@echo "  # Check what seeders are available and their dependencies"
+	@echo "  make db-seed-list"
+	@echo ""
+	@echo "  # Run only ProductSeeder (will auto-run UserSeeder first)"
+	@echo "  make db-seed-specific NAME=ProductSeeder"
+	@echo ""
+	@echo "  # Complex dependency chain example:"
+	@echo "  # UserSeeder (no deps) → CategorySeeder (no deps) → ProductSeeder (needs User,Category) → OrderSeeder (needs User,Product)"
 
-## Show help with all available commands
+## Show help with all available commands (Updated)
 help:
 	@echo "🚀 Go Clean Gin API - Laravel-style Development"
 	@echo ""
@@ -497,7 +537,7 @@ help:
 	@echo ""
 	@echo "🎨 Laravel-style Generators:"
 	@echo "  make-migration     Create new migration file"
-	@echo "  make-seeder        Create new seeder file"
+	@echo "  make-seeder        Create seeder with dependency support"
 	@echo "  make-entity        Create new entity/model file"
 	@echo "  make-package       Create new package (handler, usecase, repository, port)"
 	@echo "  make-model         Create complete model stack (entity + migration + seeder)"
@@ -512,7 +552,11 @@ help:
 	@echo "  migrate-status     Show migration status"
 	@echo "  migrate-rollback   Rollback migrations"
 	@echo "  migrate-fresh      Fresh migration (DANGER!)"
-	@echo "  db-seed            Run database seeders"
+	@echo ""
+	@echo "🌱 Database Seeding (with Dependencies):"
+	@echo "  db-seed            Run all seeders (auto-resolves dependencies)"
+	@echo "  db-seed-list       List all seeders with their dependencies"
+	@echo "  db-seed-specific   Run specific seeder with its dependencies"
 	@echo ""
 	@echo "🏭 Database Management:"
 	@echo "  db-create          Create database"
@@ -542,6 +586,11 @@ help:
 	@echo "❤️  Monitoring:"
 	@echo "  health             Check application health"
 	@echo "  status             Show application status"
+	@echo ""
+	@echo "💡 New Features:"
+	@echo "  🔗 Seeder Dependencies: Seeders automatically run in correct order"
+	@echo "  📊 Dependency Visualization: See which seeders depend on others"
+	@echo "  🎯 Smart Execution: Run specific seeder with auto-dependency resolution"
 	@echo ""
 	@echo "For detailed examples: make examples"
 	@echo "For Laravel-style workflow: https://laravel.com/docs/migrations"

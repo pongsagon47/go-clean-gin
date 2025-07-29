@@ -16,14 +16,14 @@ type ProductSeeder struct{}
 func (s *ProductSeeder) Run(db *gorm.DB) error {
 	logger.Info("Running ProductSeeder...")
 
-	// Check if products already exist
+	// Check if data already exists
 	var count int64
 	if err := db.Raw("SELECT COUNT(*) FROM products").Scan(&count).Error; err != nil {
 		return err
 	}
 
 	if count > 0 {
-		logger.Info("Products already exist, skipping ProductSeeder")
+		logger.Info("products already exist, skipping ProductSeeder")
 		return nil
 	}
 
@@ -110,13 +110,20 @@ func (s *ProductSeeder) Run(db *gorm.DB) error {
 		}
 	}
 
-	logger.Info("ProductSeeder completed successfully", zap.Int("products_created", len(products)))
+	logger.Info("ProductSeeder completed successfully")
 	return nil
 }
 
 // Name returns seeder name
 func (s *ProductSeeder) Name() string {
 	return "ProductSeeder"
+}
+
+// Dependencies returns list of seeders that must run before this seeder
+func (s *ProductSeeder) Dependencies() []string {
+	return []string{
+		"UserSeeder",
+	}
 }
 
 // Auto-register seeder

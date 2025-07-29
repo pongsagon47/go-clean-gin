@@ -8,7 +8,8 @@ A production-ready RESTful API built with Go, Gin framework following Clean Arch
 - 🔐 **JWT Authentication** with secure token validation
 - 🐘 **PostgreSQL Database** with GORM and connection pooling
 - 🎨 **Laravel-style Migrations** with file-based versioning and rollback support
-- 🌱 **Database Seeders** for development and testing data
+- 🌱 **Enhanced Database Seeders** with automatic dependency resolution
+- 🔗 **Smart Dependency Management** prevents seeder execution errors
 - 🛠️ **Artisan CLI Tool** for generating migrations, seeders, entities, and packages
 - 📦 **Package Generator** for complete Clean Architecture modules
 - 📝 **Advanced Request Validation** with custom error messages
@@ -39,10 +40,10 @@ go-clean-gin/
 │   │   ├── manager.go         # Migration manager
 │   │   ├── 2024_01_15_120000_create_users_table.go
 │   │   └── 2024_01_15_130000_create_products_table.go
-│   ├── seeders/               # 🆕 Laravel-style seeder files
-│   │   ├── manager.go         # Seeder manager
-│   │   ├── user_seeder.go
-│   │   └── product_seeder.go
+│   ├── seeders/               # 🆕 Enhanced seeder files with dependencies
+│   │   ├── manager.go         # Enhanced seeder manager
+│   │   ├── user_seeder.go     # Base seeder (no dependencies)
+│   │   └── product_seeder.go  # Depends on UserSeeder
 │   ├── auth/                  # Authentication module
 │   │   ├── handler.go         # HTTP handlers
 │   │   ├── usecase.go         # Business logic
@@ -146,7 +147,7 @@ make db-create
 # Run migrations
 make migrate
 
-# Seed database with sample data
+# Seed database with sample data (automatic dependency resolution!)
 make db-seed
 ```
 
@@ -190,7 +191,7 @@ make make-model NAME=Post FIELDS="title:string,content:text,author_id:uuid,statu
 
 - `internal/entity/post.go` - Complete entity with GORM tags, request/response structs
 - `internal/migrations/2024_xx_xx_create_posts_table.go` - Migration with proper SQL
-- `internal/seeders/post_seeder.go` - Seeder template
+- `internal/seeders/post_seeder.go` - Seeder template with dependency support
 
 #### **Option 2: Step by Step**
 
@@ -198,7 +199,7 @@ make make-model NAME=Post FIELDS="title:string,content:text,author_id:uuid,statu
 # Create individual components
 make make-entity NAME=Post FIELDS="title:string,content:text"
 make make-migration NAME=create_posts_table CREATE=true TABLE=posts
-make make-seeder NAME=PostSeeder TABLE=posts
+make make-seeder NAME=PostSeeder TABLE=posts DEPS="UserSeeder"
 ```
 
 #### **Option 3: Add Package Structure**
@@ -247,17 +248,193 @@ make migrate-rollback COUNT=3  # Last 3 migrations
 make migrate-fresh
 ```
 
-### 🌱 Database Seeding
+## 🌱 Enhanced Database Seeding with Dependency Management
+
+### 🔗 Smart Dependency System
+
+Our Laravel-style seeder system now supports **automatic dependency resolution**! Seeders can declare dependencies on other seeders, and the system will automatically run them in the correct order.
+
+#### Key Features
+
+- ✅ **Automatic Dependency Resolution** - Run seeders in correct order
+- ✅ **Circular Dependency Detection** - Prevent infinite loops
+- ✅ **Topological Sorting** - Optimal execution order using Kahn's algorithm
+- ✅ **Smart Execution** - Run specific seeder with auto-dependency resolution
+- ✅ **Dependency Visualization** - See which seeders depend on others
+
+### Creating Seeders with Dependencies
+
+#### Basic Seeder (No Dependencies)
 
 ```bash
-# Run all seeders
+# Create a basic seeder
+make make-seeder NAME=UserSeeder TABLE=users
+```
+
+**Generated seeder:**
+
+```go
+// internal/seeders/user_seeder.go
+func (s *UserSeeder) Dependencies() []string {
+    return []string{} // No dependencies
+}
+```
+
+#### Seeder with Dependencies
+
+```bash
+# Create seeder that depends on UserSeeder
+make make-seeder NAME=ProductSeeder TABLE=products DEPS="UserSeeder"
+
+# Create seeder with multiple dependencies
+make make-seeder NAME=OrderSeeder TABLE=orders DEPS="UserSeeder,ProductSeeder"
+```
+
+**Generated seeder:**
+
+```go
+// internal/seeders/product_seeder.go
+func (s *ProductSeeder) Dependencies() []string {
+    return []string{"UserSeeder"} // Depends on UserSeeder
+}
+```
+
+### Running Seeders
+
+#### Run All Seeders (Automatic Order)
+
+```bash
+# Run all seeders - system automatically resolves dependencies
 make db-seed
 
-# Run Specific Seeder
-make db-seed NAME=ProductSeeder
+# Example execution order:
+# 1. UserSeeder (no dependencies)
+# 2. CategorySeeder (no dependencies)
+# 3. ProductSeeder (depends on UserSeeder)
+# 4. OrderSeeder (depends on UserSeeder, ProductSeeder)
+```
 
-# Create new seeders
-make make-seeder NAME=ProductSeeder TABLE=products
+#### Run Specific Seeder (With Dependencies)
+
+```bash
+# Run ProductSeeder - system will automatically run UserSeeder first
+make db-seed-specific NAME=ProductSeeder
+
+# Execution order:
+# 1. UserSeeder (dependency)
+# 2. ProductSeeder (target)
+```
+
+#### List Seeders with Dependencies
+
+```bash
+# See all seeders and their dependencies
+make db-seed-list
+
+# Output example:
+# Registered Seeders:
+# ==================
+# 1. UserSeeder
+# 2. CategorySeeder
+# 3. ProductSeeder (depends on: UserSeeder)
+# 4. OrderSeeder (depends on: UserSeeder, ProductSeeder)
+# ==================
+# Total seeders: 4
+```
+
+### Real-World Example: E-commerce System
+
+#### Step 1: Create Entities
+
+```bash
+# Create entities with relationships
+make make-model NAME=User FIELDS="name:string,email:string"
+make make-model NAME=Category FIELDS="name:string,description:text"
+make make-model NAME=Product FIELDS="name:string,price:decimal,category_id:uuid,created_by:uuid"
+make make-model NAME=Order FIELDS="user_id:uuid,total:decimal,status:string"
+```
+
+#### Step 2: Create Seeders with Dependencies
+
+```bash
+# Base seeders (no dependencies)
+make make-seeder NAME=UserSeeder TABLE=users
+make make-seeder NAME=CategorySeeder TABLE=categories
+
+# ProductSeeder needs users for created_by field
+make make-seeder NAME=ProductSeeder TABLE=products DEPS="UserSeeder,CategorySeeder"
+
+# OrderSeeder needs users and products
+make make-seeder NAME=OrderSeeder TABLE=orders DEPS="UserSeeder,ProductSeeder"
+```
+
+#### Step 3: Run Migrations and Seeders
+
+```bash
+make migrate
+make db-seed  # Runs in order: User → Category → Product → Order
+```
+
+### Advanced Dependency Examples
+
+#### Complex Dependency Chain
+
+```bash
+# Blog system with complex relationships
+make make-seeder NAME=UserSeeder TABLE=users
+make make-seeder NAME=CategorySeeder TABLE=categories
+make make-seeder NAME=PostSeeder TABLE=posts DEPS="UserSeeder,CategorySeeder"
+make make-seeder NAME=CommentSeeder TABLE=comments DEPS="UserSeeder,PostSeeder"
+make make-seeder NAME=TagSeeder TABLE=tags
+make make-seeder NAME=PostTagSeeder TABLE=post_tags DEPS="PostSeeder,TagSeeder"
+```
+
+**Execution order:**
+
+1. UserSeeder, CategorySeeder, TagSeeder (no dependencies)
+2. PostSeeder (after User, Category)
+3. CommentSeeder (after User, Post)
+4. PostTagSeeder (after Post, Tag)
+
+#### Error Prevention
+
+The system prevents common errors:
+
+```bash
+# ❌ Circular dependency detection
+# If PostSeeder depends on CommentSeeder AND CommentSeeder depends on PostSeeder
+# System will throw: "circular dependency detected"
+
+# ❌ Missing dependency detection
+# If ProductSeeder depends on "NonExistentSeeder"
+# System will throw: "seeder NonExistentSeeder not found"
+```
+
+### Benefits of Dependency Management
+
+#### Before (Manual Order)
+
+```bash
+# Had to run in specific order manually
+make db-seed NAME=UserSeeder
+make db-seed NAME=CategorySeeder
+make db-seed NAME=ProductSeeder    # Would fail if UserSeeder not run first
+make db-seed NAME=OrderSeeder      # Would fail if ProductSeeder not run first
+```
+
+#### After (Automatic Resolution)
+
+```bash
+# Just run what you need - system handles the rest
+make db-seed-specific NAME=OrderSeeder
+
+# System automatically runs:
+# 1. UserSeeder (dependency of ProductSeeder)
+# 2. ProductSeeder (dependency of OrderSeeder)
+# 3. OrderSeeder (target)
+
+# Or run all seeders - system finds optimal order
+make db-seed
 ```
 
 ## 📡 API Endpoints
@@ -457,7 +634,7 @@ make clean              # Clean build artifacts
 ```bash
 # 🎨 Generators
 make make-migration     # Create new migration file
-make make-seeder        # Create new seeder file
+make make-seeder        # Create seeder with dependency support
 make make-entity        # Create new entity/model file
 make make-package       # Create new package structure
 make make-model         # Create complete model stack
@@ -473,8 +650,10 @@ make migrate-status     # Show migration status
 make migrate-rollback   # Rollback migrations
 make migrate-fresh      # Fresh migration (DANGER!)
 
-# 🌱 Database Seeding
-make db-seed            # Run database seeders
+# 🌱 Database Seeding (with Dependencies)
+make db-seed            # Run all seeders (auto-resolves dependencies)
+make db-seed-list       # List all seeders with their dependencies
+make db-seed-specific   # Run specific seeder with its dependencies
 
 # 🏭 Database Management
 make db-create          # Create database
@@ -504,7 +683,7 @@ make status             # Show application status
 
 ## 📖 Complete Workflow Examples
 
-### Create a Blog System
+### Create a Blog System with Smart Dependencies
 
 ```bash
 # 1. Setup project
@@ -512,27 +691,64 @@ make setup
 make build-artisan
 
 # 2. Create blog entities
-make make-model NAME=Post FIELDS="title:string,content:text,author_id:uuid,status:string"
-make make-model NAME=Comment FIELDS="post_id:uuid,content:text,author_id:uuid"
+make make-model NAME=User FIELDS="name:string,email:string"
 make make-model NAME=Category FIELDS="name:string,description:text"
+make make-model NAME=Post FIELDS="title:string,content:text,author_id:uuid,category_id:uuid"
+make make-model NAME=Comment FIELDS="post_id:uuid,content:text,author_id:uuid"
 
-# 3. Create package structures
+# 3. Create seeders with proper dependencies
+make make-seeder NAME=UserSeeder TABLE=users
+make make-seeder NAME=CategorySeeder TABLE=categories
+make make-seeder NAME=PostSeeder TABLE=posts DEPS="UserSeeder,CategorySeeder"
+make make-seeder NAME=CommentSeeder TABLE=comments DEPS="UserSeeder,PostSeeder"
+
+# 4. Create package structures
 make make-package NAME=Post
 make make-package NAME=Comment
 make make-package NAME=Category
 
-# 4. Add relationships and indexes
-make add-column TABLE=posts COLUMN=category_id TYPE=uuid
+# 5. Add relationships and indexes
 make add-index TABLE=posts COLUMNS="author_id,created_at"
 make add-index TABLE=posts COLUMNS="category_id,status"
 make add-index TABLE=comments COLUMNS="post_id"
 
-# 5. Deploy and seed
+# 6. Deploy and seed (automatic dependency resolution!)
 make migrate
-make db-seed
+make db-seed    # Runs: User → Category → Post → Comment
 
-# 6. Start development
+# 7. Start development
 make dev
+```
+
+### E-commerce System with Complex Dependencies
+
+```bash
+# 1. Create entities
+make make-model NAME=User FIELDS="name:string,email:string"
+make make-model NAME=Category FIELDS="name:string,description:text"
+make make-model NAME=Product FIELDS="name:string,price:decimal,category_id:uuid,created_by:uuid"
+make make-model NAME=Cart FIELDS="user_id:uuid,product_id:uuid,quantity:int"
+make make-model NAME=Order FIELDS="user_id:uuid,total:decimal,status:string"
+
+# 2. Create seeders with smart dependencies
+make make-seeder NAME=UserSeeder TABLE=users
+make make-seeder NAME=CategorySeeder TABLE=categories
+make make-seeder NAME=ProductSeeder TABLE=products DEPS="UserSeeder,CategorySeeder"
+make make-seeder NAME=CartSeeder TABLE=carts DEPS="UserSeeder,ProductSeeder"
+make make-seeder NAME=OrderSeeder TABLE=orders DEPS="UserSeeder,ProductSeeder"
+
+# 3. Check dependency tree
+make db-seed-list
+# Output:
+# 1. UserSeeder
+# 2. CategorySeeder
+# 3. ProductSeeder (depends on: UserSeeder, CategorySeeder)
+# 4. CartSeeder (depends on: UserSeeder, ProductSeeder)
+# 5. OrderSeeder (depends on: UserSeeder, ProductSeeder)
+
+# 4. Run specific seeder (dependencies auto-resolved)
+make db-seed-specific NAME=CartSeeder
+# Runs: UserSeeder → CategorySeeder → ProductSeeder → CartSeeder
 ```
 
 ### Add Features to Existing Models
@@ -557,6 +773,7 @@ make migrate
 # Check current status
 make migrate-status
 make db-info
+make db-seed-list   # See seeder dependencies
 
 # Reset everything (development)
 make migrate-fresh
@@ -636,7 +853,7 @@ This project follows **Clean Architecture** principles with **Laravel-style data
 - **Interface Adapters** (`internal/*/handler.go`, `internal/*/repository.go`) - External interfaces
 - **Frameworks & Drivers** (`pkg/`, `cmd/`) - External frameworks
 - **Migrations** (`internal/migrations/`) - Database schema versioning
-- **Seeders** (`internal/seeders/`) - Database data seeding
+- **Seeders** (`internal/seeders/`) - Database data seeding with dependency management
 
 ### Key Patterns
 
@@ -644,13 +861,14 @@ This project follows **Clean Architecture** principles with **Laravel-style data
 - **Dependency Injection** - Loose coupling
 - **Middleware Pattern** - Cross-cutting concerns
 - **Migration Pattern** - Database schema versioning (Laravel-style)
-- **Seeder Pattern** - Database data management
+- **Enhanced Seeder Pattern** - Database data management with dependency resolution
 - **Standardized Error Handling** - Centralized error management
 - **Response Standardization** - Consistent API responses
 
 ### Advanced Features
 
 - **Laravel-style Migrations** - File-based database versioning with rollback support
+- **Smart Seeder Dependencies** - Automatic dependency resolution with topological sorting
 - **Artisan CLI Tool** - Command-line interface for generating migrations, entities, and packages
 - **Auto-registration** - Automatic migration and seeder discovery
 - **Package Generator** - Complete Clean Architecture scaffolding
@@ -669,18 +887,22 @@ This project follows **Clean Architecture** principles with **Laravel-style data
 - **Transaction Safety**: All migrations run in database transactions
 - **Status Tracking**: See which migrations have been applied
 
-### Seeder System
+### Enhanced Seeder System
 
+- **Smart Dependencies**: Seeders automatically run in correct order
 - **Data Seeding**: Populate database with development/test data
 - **Environment Awareness**: Different seeds for different environments
-- **Dependency Management**: Seeders can depend on each other
+- **Dependency Management**: Seeders can depend on each other with automatic resolution
 - **Idempotent**: Safe to run multiple times
+- **Circular Dependency Detection**: Prevents infinite loops
+- **Topological Sorting**: Optimal execution order using advanced algorithms
 
 ### Artisan CLI
 
 - **Code Generation**: Generate migration, seeder, entity, and package boilerplate
 - **Database Management**: Run migrations, rollbacks, and seeders
 - **Status Monitoring**: Check current database state
+- **Dependency Visualization**: See seeder dependency trees
 - **Laravel-familiar**: Commands similar to Laravel artisan
 
 ### Package Generator
@@ -710,9 +932,10 @@ The Laravel-style generator automatically maps field types:
 2. Create your feature branch (`git checkout -b feature/amazing-feature`)
 3. Run tests (`make test`)
 4. Test migrations (`make migrate-status`, `make migrate`, `make migrate-rollback`)
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
+5. Test seeder dependencies (`make db-seed-list`, `make db-seed`)
+6. Commit your changes (`git commit -m 'Add amazing feature'`)
+7. Push to the branch (`git push origin feature/amazing-feature`)
+8. Open a Pull Request
 
 ## 📝 License
 
@@ -758,6 +981,21 @@ make list-migrations
 
 # Reset database (DANGER!)
 make db-reset
+```
+
+#### Seeder Dependency Issues
+
+```bash
+# Check seeder dependencies
+make db-seed-list
+
+# Test specific seeder with dependencies
+make db-seed-specific NAME=ProductSeeder
+
+# Common errors and solutions:
+# - "circular dependency detected" → Check your dependency chain
+# - "seeder X not found" → Make sure the dependency seeder exists
+# - "admin user not found" → Ensure UserSeeder runs before ProductSeeder
 ```
 
 #### Artisan CLI Issues
@@ -806,9 +1044,198 @@ This will show you detailed examples of:
 - Creating complete features with entities, migrations, and packages
 - Managing database schema with migrations
 - Adding columns, indexes, and constraints
-- Creating and running seeders
+- Creating and running seeders with dependencies
 - Rolling back migrations
 - Database management and reset operations
+
+### Seeder Dependency Best Practices
+
+#### 1. Design Dependency Chains Carefully
+
+```bash
+# ✅ Good: Clear, logical dependencies
+UserSeeder → ProductSeeder → OrderSeeder
+
+# ❌ Avoid: Complex circular dependencies
+PostSeeder ↔ CommentSeeder ↔ UserSeeder
+```
+
+#### 2. Use Meaningful Names
+
+```bash
+# ✅ Good: Clear naming
+make make-seeder NAME=UserSeeder TABLE=users
+make make-seeder NAME=ProductSeeder TABLE=products DEPS="UserSeeder"
+
+# ❌ Avoid: Ambiguous names
+make make-seeder NAME=DataSeeder
+```
+
+#### 3. Keep Dependencies Minimal
+
+```bash
+# ✅ Good: Only necessary dependencies
+make make-seeder NAME=ProductSeeder DEPS="UserSeeder"
+
+# ❌ Avoid: Unnecessary dependencies
+make make-seeder NAME=ProductSeeder DEPS="UserSeeder,CategorySeeder,TagSeeder,SettingSeeder"
+```
+
+#### 4. Document Complex Relationships
+
+```go
+// In your seeder file
+func (s *OrderSeeder) Dependencies() []string {
+    // OrderSeeder needs:
+    // - UserSeeder: for customer data
+    // - ProductSeeder: for product references
+    return []string{"UserSeeder", "ProductSeeder"}
+}
+```
+
+## 🎯 Migration Patterns
+
+### Common Migration Patterns
+
+#### Create Table Migration
+
+```bash
+make make-migration NAME=create_posts_table CREATE=true TABLE=posts FIELDS="title:string,content:text,author_id:uuid"
+```
+
+#### Add Column Migration
+
+```bash
+make add-column TABLE=users COLUMN=phone TYPE=string
+```
+
+#### Add Index Migration
+
+```bash
+make add-index TABLE=products COLUMNS="category,status"
+```
+
+#### Complex Migration Example
+
+```bash
+# 1. Create base tables
+make make-migration NAME=create_users_table CREATE=true TABLE=users FIELDS="name:string,email:string"
+make make-migration NAME=create_categories_table CREATE=true TABLE=categories FIELDS="name:string,description:text"
+
+# 2. Create related tables
+make make-migration NAME=create_products_table CREATE=true TABLE=products FIELDS="name:string,price:decimal,category_id:uuid"
+
+# 3. Add indexes for performance
+make add-index TABLE=products COLUMNS="category_id,price"
+make add-index TABLE=products COLUMNS="name"
+
+# 4. Run all migrations
+make migrate
+```
+
+## 🔄 Development Workflow
+
+### Daily Development Flow
+
+```bash
+# 1. Start development
+make dev
+
+# 2. Create new feature
+make make-model NAME=Feature FIELDS="name:string,enabled:bool"
+make make-package NAME=Feature
+
+# 3. Add relationships
+make add-column TABLE=features COLUMN=user_id TYPE=uuid
+make add-index TABLE=features COLUMNS="user_id,enabled"
+
+# 4. Create seeder with dependencies
+make make-seeder NAME=FeatureSeeder TABLE=features DEPS="UserSeeder"
+
+# 5. Apply changes
+make migrate
+make db-seed-specific NAME=FeatureSeeder
+
+# 6. Test changes
+make test
+```
+
+### Production Deployment Flow
+
+```bash
+# 1. Build application
+make build
+make build-artisan
+
+# 2. Run migrations (production)
+./bin/artisan -action=migrate
+
+# 3. Seed production data (if needed)
+./bin/artisan -action=db:seed -name=ProductionSeeder
+
+# 4. Start application
+./bin/go-clean-gin
+```
+
+## 📊 Performance Tips
+
+### Database Optimization
+
+```bash
+# Add indexes for frequently queried columns
+make add-index TABLE=products COLUMNS="category,status,created_at"
+make add-index TABLE=orders COLUMNS="user_id,status"
+make add-index TABLE=users COLUMNS="email"  # Unique constraint
+
+# Use appropriate field types
+# decimal for money: price:decimal
+# uuid for IDs: user_id:uuid
+# text for long content: description:text
+# string for short text: name:string
+```
+
+### Seeder Performance
+
+```go
+// In your seeder - batch insert for large datasets
+func (s *ProductSeeder) Run(db *gorm.DB) error {
+    products := make([]entity.Product, 1000)
+
+    // Fill products slice...
+
+    // Batch insert instead of individual inserts
+    return db.CreateInBatches(products, 100).Error
+}
+```
+
+## 🔒 Security Considerations
+
+### Migration Security
+
+```bash
+# Always review migrations before running in production
+make migrate-status  # Check what will be applied
+make validate-migrations  # Validate syntax
+
+# Use rollback-safe migrations
+# Each migration should have proper Down() method
+```
+
+### Seeder Security
+
+```go
+// Don't commit sensitive data in seeders
+func (s *UserSeeder) Run(db *gorm.DB) error {
+    // ❌ Don't do this
+    password := "admin123"
+
+    // ✅ Do this instead
+    password := os.Getenv("ADMIN_DEFAULT_PASSWORD")
+    if password == "" {
+        password = "change-me-" + uuid.New().String()[:8]
+    }
+}
+```
 
 ## 📞 Support
 
@@ -816,11 +1243,21 @@ If you have any questions or need help, please:
 
 1. Check the [troubleshooting section](#-troubleshooting)
 2. Run `make examples` for Laravel-style command examples
-3. Review existing [issues](https://github.com/your-repo/issues)
-4. Create a new issue with detailed information
+3. Check seeder dependencies with `make db-seed-list`
+4. Review existing [issues](https://github.com/your-repo/issues)
+5. Create a new issue with detailed information
+
+### Getting Help with Dependencies
+
+```bash
+# Debug dependency issues
+make db-seed-list           # See all seeders and dependencies
+make db-seed-specific NAME=YourSeeder  # Test specific seeder
+make validate-migrations    # Check for syntax errors
+```
 
 ---
 
-**Happy coding with Laravel-style migrations in Go! 🚀✨🎨**
+**Happy coding with Laravel-style migrations and smart seeder dependencies in Go! 🚀✨🎨**
 
-_Experience the best of both worlds: Laravel's developer experience with Go's performance and type safety._
+_Experience the best of both worlds: Laravel's developer experience with Go's performance and type safety, now with intelligent dependency management that prevents seeder execution errors!_

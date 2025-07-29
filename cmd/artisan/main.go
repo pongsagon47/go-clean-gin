@@ -24,6 +24,7 @@ var (
 	table  = flag.String("table", "", "Table name for migration")
 	create = flag.Bool("create", false, "Create table migration")
 	fields = flag.String("fields", "", "Fields for migration (name:type,email:string)")
+	deps   = flag.String("deps", "", "Dependencies for seeder (UserSeeder,CategorySeeder)") // เพิ่มบรรทัดนี้
 	count  = flag.Int("count", 1, "Number of migrations to rollback")
 	help   = flag.Bool("help", false, "Show help")
 )
@@ -51,7 +52,7 @@ func main() {
 			fmt.Println("Usage: go run cmd/artisan/main.go -action=make:seeder -name=seeder_name")
 			os.Exit(1)
 		}
-		createSeeder(*name, *table)
+		createSeeder(*name, *table, *deps)
 
 	case "make:model":
 		if *name == "" {
@@ -163,15 +164,12 @@ func createMigration(migrationName, tableName string, isCreate bool, fieldList s
 	}
 }
 
-func createSeeder(seederName, tableName string) {
+func createSeeder(seederName, tableName, depsStr string) {
 	if !strings.HasSuffix(seederName, "Seeder") {
 		seederName += "Seeder"
 	}
 
-	fmt.Println(seederName)
-
 	fileName := fmt.Sprintf("%s.go", toSnakeCase(seederName))
-	// fileName := fmt.Sprintf("%s.go", toSnakeCase(strings.TrimSuffix(seederName, "Seeder")))
 
 	// Create seeders directory if not exists
 	seedersDir := "internal/seeders"
@@ -188,9 +186,26 @@ func createSeeder(seederName, tableName string) {
 		os.Exit(1)
 	}
 
+	// Parse dependencies
+	var dependencies []string
+	if depsStr != "" {
+		depsList := strings.Split(depsStr, ",")
+		for _, dep := range depsList {
+			dep = strings.TrimSpace(dep)
+			if dep != "" {
+				// Ensure dependency ends with "Seeder"
+				if !strings.HasSuffix(dep, "Seeder") {
+					dep += "Seeder"
+				}
+				dependencies = append(dependencies, dep)
+			}
+		}
+	}
+
 	data := SeederData{
-		ClassName: seederName,
-		TableName: tableName,
+		ClassName:    seederName,
+		TableName:    tableName,
+		Dependencies: dependencies,
 	}
 
 	// Create file
@@ -212,6 +227,9 @@ func createSeeder(seederName, tableName string) {
 	fmt.Printf("📝 Class: %s\n", data.ClassName)
 	if tableName != "" {
 		fmt.Printf("🗂️  Table: %s\n", tableName)
+	}
+	if len(dependencies) > 0 {
+		fmt.Printf("🔗 Dependencies: %s\n", strings.Join(dependencies, ", "))
 	}
 }
 
@@ -451,6 +469,30 @@ func showMigrationStatus() {
 }
 
 func runSeeders(seederName string) {
+
+	if seederName == "list" {
+		fmt.Println("📋 Listing seeders...")
+		// Load config และ database แล้วเรียก ListSeeders
+		cfg := config.Load()
+		if err := logger.Init(cfg.Log.Level, cfg.Log.Format); err != nil {
+			fmt.Printf("❌ Failed to initialize logger: %v\n", err)
+			os.Exit(1)
+		}
+		defer logger.Sync()
+
+		db, err := database.NewPostgresDB(&cfg.Database)
+		if err != nil {
+			fmt.Printf("❌ Failed to connect to database: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := database.ListSeeders(db); err != nil {
+			fmt.Printf("❌ Failed to list seeders: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	fmt.Println("🌱 Running seeders...")
 
 	// Load configuration
@@ -523,6 +565,13 @@ func showHelp() {
 	fmt.Println("")
 	fmt.Println("  # Create seeder")
 	fmt.Println("  go run cmd/artisan/main.go -action=make:seeder -name=UserSeeder -table=users")
+	fmt.Println("")
+	fmt.Println("  # Create seeder with dependencies")
+	fmt.Println("  go run cmd/artisan/main.go -action=make:seeder -name=ProductSeeder -table=products -deps=\"UserSeeder\"")
+	fmt.Println("  go run cmd/artisan/main.go -action=make:seeder -name=OrderSeeder -table=orders -deps=\"UserSeeder,ProductSeeder\"")
+	fmt.Println("")
+	fmt.Println("  # List all seeders")
+	fmt.Println("  go run cmd/artisan/main.go -action=db:seed -name=list")
 }
 
 // Helper types and functions
@@ -541,8 +590,9 @@ type Field struct {
 }
 
 type SeederData struct {
-	ClassName string
-	TableName string
+	ClassName    string
+	TableName    string
+	Dependencies []string // เพิ่มฟิลด์นี้
 }
 
 type EntityData struct {
@@ -863,8 +913,27 @@ type {{.ClassName}} struct{}
 func (s *{{.ClassName}}) Run(db *gorm.DB) error {
 	logger.Info("Running {{.ClassName}}...")
 
+	// Check if data already exists
+	{{- if .TableName}}
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM {{.TableName}}").Scan(&count).Error; err != nil {
+		return err
+	}
+
+	if count > 0 {
+		logger.Info("{{.TableName}} already exist, skipping {{.ClassName}}")
+		return nil
+	}
+	{{- end}}
+
 	// TODO: Implement your seeding logic here
 	// Example:
+	{{- if .Dependencies}}
+	//
+	// This seeder depends on: {{range $i, $dep := .Dependencies}}{{if $i}}, {{end}}{{$dep}}{{end}}
+	// You can safely reference data created by those seeders
+	//
+	{{- end}}
 	// data := []entity.Model{
 	//     {Field1: "value1", Field2: "value2"},
 	//     {Field1: "value3", Field2: "value4"},
@@ -879,6 +948,19 @@ func (s *{{.ClassName}}) Run(db *gorm.DB) error {
 // Name returns seeder name
 func (s *{{.ClassName}}) Name() string {
 	return "{{.ClassName}}"
+}
+
+// Dependencies returns list of seeders that must run before this seeder
+func (s *{{.ClassName}}) Dependencies() []string {
+	{{- if .Dependencies}}
+	return []string{
+		{{- range .Dependencies}}
+		"{{.}}",
+		{{- end}}
+	}
+	{{- else}}
+	return []string{} // No dependencies
+	{{- end}}
 }
 
 // Auto-register seeder
