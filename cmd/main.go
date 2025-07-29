@@ -47,7 +47,7 @@ func main() {
 
 	// Seed data (only in development)
 	if cfg.Env == "development" {
-		if err := database.SeedData(db); err != nil {
+		if err := database.SeedData(db, ""); err != nil {
 			logger.Warn("Failed to seed data", zap.Error(err))
 		}
 	}
