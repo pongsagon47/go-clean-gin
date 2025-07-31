@@ -14,6 +14,7 @@ type Config struct {
 	Server   ServerConfig
 	JWT      JWTConfig
 	Log      LogConfig
+	Email    EmailConfig
 	Env      string
 }
 
@@ -45,6 +46,16 @@ type JWTConfig struct {
 type LogConfig struct {
 	Level  string
 	Format string
+}
+
+type EmailConfig struct {
+	Host        string
+	Port        int
+	Username    string
+	Password    string
+	From        string
+	FromName    string
+	TemplateDir string
 }
 
 func Load() *Config {
@@ -79,6 +90,15 @@ func Load() *Config {
 		Log: LogConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),
 			Format: getEnv("LOG_FORMAT", "json"),
+		},
+		Email: EmailConfig{
+			Host:        getEnv("SMTP_HOST", "smtp.gmail.com"),
+			Port:        getEnvAsInt("SMTP_PORT", 587),
+			Username:    getEnv("SMTP_USERNAME", ""),
+			Password:    getEnv("SMTP_PASSWORD", ""),
+			From:        getEnv("SMTP_FROM", ""),
+			FromName:    getEnv("SMTP_FROM_NAME", "Go Clean Gin"),
+			TemplateDir: getEnv("EMAIL_TEMPLATE_DIR", "./templates"),
 		},
 		Env: getEnv("ENV", "development"),
 	}

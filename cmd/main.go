@@ -40,17 +40,17 @@ func main() {
 		logger.Fatal("Failed to initialize database", zap.Error(err))
 	}
 
-	// Run migrations
-	if err := database.RunMigrations(db); err != nil {
-		logger.Fatal("Failed to run migrations", zap.Error(err))
-	}
+	// // Run migrations
+	// if err := database.RunMigrations(db); err != nil {
+	// 	logger.Fatal("Failed to run migrations", zap.Error(err))
+	// }
 
-	// Seed data (only in development)
-	if cfg.Env == "development" {
-		if err := database.SeedData(db, ""); err != nil {
-			logger.Warn("Failed to seed data", zap.Error(err))
-		}
-	}
+	// // Seed data (only in development)
+	// if cfg.Env == "development" {
+	// 	if err := database.SeedData(db, ""); err != nil {
+	// 		logger.Warn("Failed to seed data", zap.Error(err))
+	// 	}
+	// }
 
 	// Initialize dependency injection container
 	containerInstance := container.NewContainer(cfg, db)
