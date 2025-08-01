@@ -9,6 +9,7 @@ import (
 	"go-clean-gin/internal/entity"
 	"go-clean-gin/pkg/errors"
 	"go-clean-gin/pkg/logger"
+	"go-clean-gin/pkg/mail"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -20,12 +21,14 @@ import (
 type authUsecase struct {
 	repo   AuthRepository
 	config *config.Config
+	mail   *mail.Mailer
 }
 
-func NewAuthUsecase(repo AuthRepository, config *config.Config) AuthUsecase {
+func NewAuthUsecase(repo AuthRepository, config *config.Config, mail *mail.Mailer) AuthUsecase {
 	return &authUsecase{
 		repo:   repo,
 		config: config,
+		mail:   mail,
 	}
 }
 

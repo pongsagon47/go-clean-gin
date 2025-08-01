@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/joho/godotenv"
@@ -49,13 +50,16 @@ type LogConfig struct {
 }
 
 type EmailConfig struct {
-	Host        string
-	Port        int
-	Username    string
-	Password    string
-	From        string
-	FromName    string
-	TemplateDir string
+	Host               string
+	Port               int
+	Username           string
+	Password           string
+	From               string
+	FromName           string
+	TemplateDir        string
+	MaxRetries         int
+	RetryDelay         time.Duration
+	InsecureSkipVerify bool
 }
 
 func Load() *Config {
@@ -92,13 +96,16 @@ func Load() *Config {
 			Format: getEnv("LOG_FORMAT", "json"),
 		},
 		Email: EmailConfig{
-			Host:        getEnv("SMTP_HOST", "smtp.gmail.com"),
-			Port:        getEnvAsInt("SMTP_PORT", 587),
-			Username:    getEnv("SMTP_USERNAME", ""),
-			Password:    getEnv("SMTP_PASSWORD", ""),
-			From:        getEnv("SMTP_FROM", ""),
-			FromName:    getEnv("SMTP_FROM_NAME", "Go Clean Gin"),
-			TemplateDir: getEnv("EMAIL_TEMPLATE_DIR", "./templates"),
+			Host:               getEnv("SMTP_HOST", "smtp.gmail.com"),
+			Port:               getEnvAsInt("SMTP_PORT", 587),
+			Username:           getEnv("SMTP_USERNAME", ""),
+			Password:           getEnv("SMTP_PASSWORD", ""),
+			From:               getEnv("SMTP_FROM", ""),
+			FromName:           getEnv("SMTP_FROM_NAME", "Go Clean Gin"),
+			TemplateDir:        getEnv("EMAIL_TEMPLATE_DIR", "./templates"),
+			MaxRetries:         getEnvAsInt("EMAIL_MAX_RETRIES", 3),
+			RetryDelay:         getEnvAsDuration("EMAIL_RETRY_DELAY", 1*time.Second),
+			InsecureSkipVerify: getEnvAsBool("EMAIL_INSECURE_SKIP_VERIFY", false),
 		},
 		Env: getEnv("ENV", "development"),
 	}
@@ -125,6 +132,13 @@ func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
 		if duration, err := time.ParseDuration(value); err == nil {
 			return duration
 		}
+	}
+	return defaultValue
+}
+
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		return strings.ToLower(value) == "true"
 	}
 	return defaultValue
 }

@@ -22,6 +22,7 @@ func SetupRouter(container *container.Container) *gin.Engine {
 	router.Use(middleware.CORS())
 	router.Use(middleware.Recovery())
 	router.Use(middleware.Logging())
+	router.Use(middleware.Helmet())
 	router.Use(middleware.ErrorHandler()) // Add error handler middleware
 
 	// Health check endpoint

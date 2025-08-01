@@ -51,7 +51,7 @@ func TestAuthUsecase_Register_Success(t *testing.T) {
 			ExpirationHours: 24,
 		},
 	}
-	usecase := NewAuthUsecase(mockRepo, cfg)
+	usecase := NewAuthUsecase(mockRepo, cfg, nil)
 
 	req := &entity.RegisterRequest{
 		Email:     "test@example.com",
@@ -85,7 +85,7 @@ func TestAuthUsecase_Register_EmailExists(t *testing.T) {
 			ExpirationHours: 24,
 		},
 	}
-	usecase := NewAuthUsecase(mockRepo, cfg)
+	usecase := NewAuthUsecase(mockRepo, cfg, nil)
 
 	req := &entity.RegisterRequest{
 		Email:     "test@example.com",

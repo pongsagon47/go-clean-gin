@@ -71,6 +71,8 @@ go-clean-gin/
 │   │   └── errors.go         # Application-specific errors
 │   ├── logger/                # Logging utilities
 │   │   └── logger.go         # Zap logger with levels
+│   ├── mail/                 # mail library
+│   │   └── gomail.go       # Standardized API responses
 │   ├── response/              # Response system
 │   │   └── response.go       # Standardized API responses
 │   └── validator/             # Input validation

@@ -19,7 +19,7 @@ func (s *UserSeeder) Run(db *gorm.DB) error {
 
 	// Check if users already exist
 	var count int64
-	if err := db.Raw("SELECT COUNT(*) FROM users").Scan(&count).Error; err != nil {
+	if err := db.Raw("SELECT COUNT(*) FROM tb_users").Scan(&count).Error; err != nil {
 		return err
 	}
 
@@ -74,7 +74,7 @@ func (s *UserSeeder) Run(db *gorm.DB) error {
 	// Insert users
 	for _, user := range users {
 		if err := db.Exec(`
-			INSERT INTO users (id, email, username, password, first_name, last_name, is_active, created_at, updated_at)
+			INSERT INTO tb_users (id, email, username, password, first_name, last_name, is_active, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, user["id"], user["email"], user["username"], user["password"],
 			user["first_name"], user["last_name"], user["is_active"],

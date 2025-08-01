@@ -18,7 +18,7 @@ func (s *ProductSeeder) Run(db *gorm.DB) error {
 
 	// Check if data already exists
 	var count int64
-	if err := db.Raw("SELECT COUNT(*) FROM products").Scan(&count).Error; err != nil {
+	if err := db.Raw("SELECT COUNT(*) FROM tb_products").Scan(&count).Error; err != nil {
 		return err
 	}
 
@@ -29,7 +29,7 @@ func (s *ProductSeeder) Run(db *gorm.DB) error {
 
 	// Get admin user ID for created_by field
 	var adminUserID string
-	if err := db.Raw("SELECT id FROM users WHERE email = ? LIMIT 1", "admin@example.com").Scan(&adminUserID).Error; err != nil {
+	if err := db.Raw("SELECT id FROM tb_users WHERE email = ? LIMIT 1", "admin@example.com").Scan(&adminUserID).Error; err != nil {
 		logger.Error("Admin user not found for ProductSeeder", zap.Error(err))
 		return err
 	}
@@ -101,7 +101,7 @@ func (s *ProductSeeder) Run(db *gorm.DB) error {
 	// Insert products
 	for _, product := range products {
 		if err := db.Exec(`
-			INSERT INTO products (id, name, description, price, stock, category, is_active, created_by, created_at, updated_at)
+			INSERT INTO tb_products (id, name, description, price, stock, category, is_active, created_by, created_at, updated_at)
 			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		`, product["id"], product["name"], product["description"], product["price"],
 			product["stock"], product["category"], product["is_active"],

@@ -4,13 +4,17 @@ import (
 	"go-clean-gin/config"
 	"go-clean-gin/internal/auth"
 	"go-clean-gin/internal/product"
+	"go-clean-gin/pkg/logger"
+	"go-clean-gin/pkg/mail"
 
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 type Container struct {
 	Config *config.Config
 	DB     *gorm.DB
+	Mail   *mail.Mailer
 
 	// Repositories
 	AuthRepo    auth.AuthRepository
@@ -26,29 +30,43 @@ type Container struct {
 }
 
 func NewContainer(cfg *config.Config, db *gorm.DB) *Container {
-	container := &Container{
-		Config: cfg,
-		DB:     db,
+
+	mail, err := mail.NewGomail(&cfg.Email)
+	if err != nil {
+		logger.Fatal("Failed to initialize email", zap.Error(err))
 	}
 
-	container.setupRepositories()
-	container.setupUsecases()
-	container.setupHandlers()
+	if err := mail.TestConnection(); err != nil {
+		logger.Fatal("Failed to test email connection", zap.Error(err))
+	}
 
-	return container
-}
+	logger.Info("Email connection successful")
 
-func (c *Container) setupRepositories() {
-	c.AuthRepo = auth.NewAuthRepository(c.DB)
-	c.ProductRepo = product.NewProductRepository(c.DB)
-}
+	// Auth
+	authRepo := auth.NewAuthRepository(db)
+	authUsecase := auth.NewAuthUsecase(authRepo, cfg, mail)
+	authHandler := auth.NewAuthHandler(authUsecase)
 
-func (c *Container) setupUsecases() {
-	c.AuthUsecase = auth.NewAuthUsecase(c.AuthRepo, c.Config)
-	c.ProductUsecase = product.NewProductUsecase(c.ProductRepo)
-}
+	// Product
+	productRepo := product.NewProductRepository(db)
+	productUsecase := product.NewProductUsecase(productRepo)
+	productHandler := product.NewProductHandler(productUsecase)
 
-func (c *Container) setupHandlers() {
-	c.AuthHandler = auth.NewAuthHandler(c.AuthUsecase)
-	c.ProductHandler = product.NewProductHandler(c.ProductUsecase)
+	return &Container{
+		Config: cfg,
+		DB:     db,
+		Mail:   mail,
+
+		// Repositories
+		AuthRepo:    authRepo,
+		ProductRepo: productRepo,
+
+		// Usecases
+		AuthUsecase:    authUsecase,
+		ProductUsecase: productUsecase,
+
+		// Handlers
+		AuthHandler:    authHandler,
+		ProductHandler: productHandler,
+	}
 }
