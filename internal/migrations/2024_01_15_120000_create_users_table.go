@@ -1,33 +1,40 @@
 package migrations
 
 import (
+	"time"
+
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+type User struct {
+	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	Email     string         `json:"email" gorm:"uniqueIndex;not null" validate:"required,email"`
+	Username  string         `json:"username" gorm:"uniqueIndex;not null" validate:"required,min=3,max=50"`
+	Password  string         `json:"-" gorm:"not null" validate:"required,min=6"`
+	FirstName string         `json:"first_name" gorm:"not null" validate:"required,min=1,max=100"`
+	LastName  string         `json:"last_name" gorm:"not null" validate:"required,min=1,max=100"`
+	IsActive  bool           `json:"is_active" gorm:"default:true"`
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+func (User) TableName() string {
+	return "tb_users"
+}
 
 // CreateUsersTable migration - Create users table
 type CreateUsersTable struct{}
 
 // Up creates the users table
 func (m *CreateUsersTable) Up(db *gorm.DB) error {
-	return db.Exec(`
-		CREATE TABLE users (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			email VARCHAR(255) UNIQUE NOT NULL,
-			username VARCHAR(50) UNIQUE NOT NULL,
-			password VARCHAR(255) NOT NULL,
-			first_name VARCHAR(100) NOT NULL,
-			last_name VARCHAR(100) NOT NULL,
-			is_active BOOLEAN DEFAULT true,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-			deleted_at TIMESTAMP WITH TIME ZONE
-		)
-	`).Error
+	return db.AutoMigrate(&User{})
 }
 
 // Down drops the users table
 func (m *CreateUsersTable) Down(db *gorm.DB) error {
-	return db.Exec("DROP TABLE IF EXISTS users").Error
+	return db.Migrator().DropTable(&User{})
 }
 
 // Description returns migration description

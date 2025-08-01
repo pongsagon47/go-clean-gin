@@ -184,7 +184,7 @@ This project brings the beloved Laravel development experience to Go with powerf
 
 ```bash
 # Creates entity + migration + seeder in one command
-make make-model NAME=Post FIELDS="title:string,content:text,author_id:uuid,status:string"
+make make-model NAME=Post TABLE=tb_posts FIELDS="title:string|index,content:text,author_id:uuid,status:string,user_id:uuid|fk:tb_users"
 ```
 
 **Creates:**
@@ -197,9 +197,9 @@ make make-model NAME=Post FIELDS="title:string,content:text,author_id:uuid,statu
 
 ```bash
 # Create individual components
-make make-entity NAME=Post FIELDS="title:string,content:text"
-make make-migration NAME=create_posts_table CREATE=true TABLE=posts
-make make-seeder NAME=PostSeeder TABLE=posts DEPS="UserSeeder"
+make make-entity NAME=Post TABLE=tb_posts FIELDS="title:string,content:text"
+make make-migration NAME=create_posts_table CREATE=true TABLE=tb_posts
+make make-seeder NAME=PostSeeder TABLE=tb_posts DEPS="UserSeeder"
 ```
 
 #### **Option 3: Add Package Structure**
@@ -348,10 +348,10 @@ make db-seed-list
 
 ```bash
 # Create entities with relationships
-make make-model NAME=User FIELDS="name:string,email:string"
-make make-model NAME=Category FIELDS="name:string,description:text"
-make make-model NAME=Product FIELDS="name:string,price:decimal,category_id:uuid,created_by:uuid"
-make make-model NAME=Order FIELDS="user_id:uuid,total:decimal,status:string"
+make make-model NAME=User TABLE=tb_users FIELDS="name:string,email:string"
+make make-model NAME=Category TABLE=tb_users FIELDS="name:string,description:text"
+make make-model NAME=Product TABLE=tb_users FIELDS="name:string,price:decimal,category_id:uuid,created_by:uuid"
+make make-model NAME=Order TABLE=tb_users FIELDS="user_id:uuid,total:decimal,status:string"
 ```
 
 #### Step 2: Create Seeders with Dependencies
@@ -691,10 +691,10 @@ make setup
 make build-artisan
 
 # 2. Create blog entities
-make make-model NAME=User FIELDS="name:string,email:string"
-make make-model NAME=Category FIELDS="name:string,description:text"
-make make-model NAME=Post FIELDS="title:string,content:text,author_id:uuid,category_id:uuid"
-make make-model NAME=Comment FIELDS="post_id:uuid,content:text,author_id:uuid"
+make make-model NAME=User TABLE=tb_users FIELDS="name:string,email:string"
+make make-model NAME=Category TABLE=tb_category FIELDS="name:string,description:text"
+make make-model NAME=Post TABLE=tb_posts FIELDS="title:string|index,content:text,author_id:uuid|fk:tb_author,category_id:uuid|fk:tb_category"
+make make-model NAME=Comment TABLE=tb_comments FIELDS="post_id:uuid|fk:tb_posts,content:text,author_id:uuid"
 
 # 3. Create seeders with proper dependencies
 make make-seeder NAME=UserSeeder TABLE=users
@@ -724,11 +724,11 @@ make dev
 
 ```bash
 # 1. Create entities
-make make-model NAME=User FIELDS="name:string,email:string"
-make make-model NAME=Category FIELDS="name:string,description:text"
-make make-model NAME=Product FIELDS="name:string,price:decimal,category_id:uuid,created_by:uuid"
-make make-model NAME=Cart FIELDS="user_id:uuid,product_id:uuid,quantity:int"
-make make-model NAME=Order FIELDS="user_id:uuid,total:decimal,status:string"
+make make-model NAME=User TABLE=tb_user FIELDS="name:string,email:string"
+make make-model NAME=Category TABLE=tb_category FIELDS="name:string,description:text"
+make make-model NAME=Product TABLE=tb_product FIELDS="name:string,price:decimal,category_id:uuid,created_by:uuid"
+make make-model NAME=Cart TABLE=tb_cart FIELDS="user_id:uuid,product_id:uuid,quantity:int"
+make make-model NAME=Order TABLE=tb_order FIELDS="user_id:uuid,total:decimal,status:string"
 
 # 2. Create seeders with smart dependencies
 make make-seeder NAME=UserSeeder TABLE=users
@@ -1100,7 +1100,7 @@ func (s *OrderSeeder) Dependencies() []string {
 #### Create Table Migration
 
 ```bash
-make make-migration NAME=create_posts_table CREATE=true TABLE=posts FIELDS="title:string,content:text,author_id:uuid"
+make make-migration NAME=create_posts_table CREATE=true TABLE=tb_posts FIELDS="title:string,content:text,author_id:uuid|fk:tb_author"
 ```
 
 #### Add Column Migration
@@ -1119,11 +1119,11 @@ make add-index TABLE=products COLUMNS="category,status"
 
 ```bash
 # 1. Create base tables
-make make-migration NAME=create_users_table CREATE=true TABLE=users FIELDS="name:string,email:string"
-make make-migration NAME=create_categories_table CREATE=true TABLE=categories FIELDS="name:string,description:text"
+make make-migration NAME=create_users_table CREATE=true TABLE=tb_users FIELDS="name:string,email:string"
+make make-migration NAME=create_categories_table CREATE=true TABLE=tb_categories FIELDS="name:string|index,description:text"
 
 # 2. Create related tables
-make make-migration NAME=create_products_table CREATE=true TABLE=products FIELDS="name:string,price:decimal,category_id:uuid"
+make make-migration NAME=create_products_table CREATE=true TABLE=products FIELDS="name:string,price:decimal,category_id:uuid|fk:tb_categories"
 
 # 3. Add indexes for performance
 make add-index TABLE=products COLUMNS="category_id,price"
@@ -1142,7 +1142,7 @@ make migrate
 make dev
 
 # 2. Create new feature
-make make-model NAME=Feature FIELDS="name:string,enabled:bool"
+make make-model NAME=Feature TABLE=tb_feature FIELDS="name:string,enabled:bool"
 make make-package NAME=Feature
 
 # 3. Add relationships
@@ -1150,7 +1150,7 @@ make add-column TABLE=features COLUMN=user_id TYPE=uuid
 make add-index TABLE=features COLUMNS="user_id,enabled"
 
 # 4. Create seeder with dependencies
-make make-seeder NAME=FeatureSeeder TABLE=features DEPS="UserSeeder"
+make make-seeder NAME=FeatureSeeder TABLE=tb_features DEPS="UserSeeder"
 
 # 5. Apply changes
 make migrate

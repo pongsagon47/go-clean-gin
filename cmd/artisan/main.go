@@ -39,9 +39,9 @@ func main() {
 
 	switch *action {
 	case "make:migration":
-		if *name == "" {
+		if *name == "" || *table == "" {
 			fmt.Println("❌ Migration name is required")
-			fmt.Println("Usage: go run cmd/artisan/main.go -action=make:migration -name=migration_name")
+			fmt.Println("Usage: go run cmd/artisan/main.go -action=make:migration -name=migration_name -table=table_name")
 			os.Exit(1)
 		}
 		createMigration(*name, *table, *create, *fields)
@@ -55,12 +55,12 @@ func main() {
 		createSeeder(*name, *table, *deps)
 
 	case "make:model":
-		if *name == "" {
+		if *name == "" || *table == "" {
 			fmt.Println("❌ Model name is required")
-			fmt.Println("Usage: go run cmd/artisan/main.go -action=make:model -name=model_name")
+			fmt.Println("Usage: go run cmd/artisan/main.go -action=make:model -name=model_name -table=table_name")
 			os.Exit(1)
 		}
-		createModel(*name, *fields)
+		createModel(*name, *table, *fields)
 
 	case "make:package":
 		if *name == "" {
@@ -89,6 +89,7 @@ func main() {
 	}
 }
 
+// createMigration function in main.go
 func createMigration(migrationName, tableName string, isCreate bool, fieldList string) {
 	timestamp := time.Now().Format("2006_01_02_150405")
 	fileName := fmt.Sprintf("%s_%s.go", timestamp, toSnakeCase(migrationName))
@@ -108,20 +109,8 @@ func createMigration(migrationName, tableName string, isCreate bool, fieldList s
 		os.Exit(1)
 	}
 
-	// Parse fields
-	var parsedFields []Field
-	if fieldList != "" {
-		fieldPairs := strings.Split(fieldList, ",")
-		for _, pair := range fieldPairs {
-			parts := strings.Split(strings.TrimSpace(pair), ":")
-			if len(parts) == 2 {
-				parsedFields = append(parsedFields, Field{
-					Name: strings.TrimSpace(parts[0]),
-					Type: strings.TrimSpace(parts[1]),
-				})
-			}
-		}
-	}
+	// Use the new parseFields function
+	parsedFields := parseFields(fieldList)
 
 	// Create migration data
 	data := MigrationData{
@@ -162,6 +151,113 @@ func createMigration(migrationName, tableName string, isCreate bool, fieldList s
 	if tableName != "" {
 		fmt.Printf("🗂️  Table: %s\n", tableName)
 	}
+
+	// Show field summary
+	if len(parsedFields) > 0 {
+		fmt.Printf("📋 Fields:\n")
+		for _, field := range parsedFields {
+			extras := []string{}
+			if field.HasIndex {
+				extras = append(extras, "indexed")
+			}
+			if field.IsForeignKey {
+				extras = append(extras, fmt.Sprintf("FK->%s", field.FKReference))
+			}
+
+			extraStr := ""
+			if len(extras) > 0 {
+				extraStr = fmt.Sprintf(" (%s)", strings.Join(extras, ", "))
+			}
+
+			fmt.Printf("  - %s: %s%s\n", field.Name, field.Type, extraStr)
+		}
+	}
+
+	// Auto-create entity if this is a create table migration
+	if isCreate && tableName != "" {
+		fmt.Printf("\n🚀 Auto-creating entity...\n")
+		if err := autoCreateEntity(tableName, parsedFields); err != nil {
+			fmt.Printf("⚠️  Warning: Failed to create entity: %v\n", err)
+		}
+	}
+}
+
+func autoCreateEntity(tableName string, fields []Field) error {
+	// Generate entity name from table name
+	entityName := getStructName(tableName)
+	fileName := fmt.Sprintf("%s.go", strings.ToLower(entityName))
+
+	// Create entity directory if not exists
+	entityDir := "internal/entity"
+	if err := os.MkdirAll(entityDir, 0755); err != nil {
+		return fmt.Errorf("failed to create entity directory: %w", err)
+	}
+
+	filePath := filepath.Join(entityDir, fileName)
+
+	// Check if file already exists - warn but don't fail
+	if _, err := os.Stat(filePath); err == nil {
+		fmt.Printf("⚠️  Entity file already exists, skipping: %s\n", filePath)
+		return nil
+	}
+
+	// Create entity data
+	data := EntityData{
+		EntityName: entityName,
+		TableName:  tableName,
+		Fields:     fields,
+	}
+
+	// Create file
+	file, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to create entity file: %w", err)
+	}
+	defer file.Close()
+
+	// Execute template
+	tmpl := template.Must(template.New("entity").Funcs(templateFuncs).Parse(entityTemplate))
+	if err := tmpl.Execute(file, data); err != nil {
+		return fmt.Errorf("failed to generate entity file: %w", err)
+	}
+
+	fmt.Printf("✅ Entity created: %s\n", filePath)
+	fmt.Printf("📝 Entity: %s\n", entityName)
+	fmt.Printf("🗂️  Table: %s\n", tableName)
+
+	// Show entity features
+	if len(fields) > 0 {
+		fmt.Printf("📋 Entity Features:\n")
+
+		// Check for associations
+		hasAssociations := false
+		for _, field := range fields {
+			if field.IsForeignKey {
+				hasAssociations = true
+				refEntity := getStructName(field.FKReference)
+				fmt.Printf("  - %s association (belongs to %s)\n", refEntity, refEntity)
+			}
+		}
+
+		// Check for indexes
+		hasIndexes := false
+		for _, field := range fields {
+			if field.HasIndex {
+				hasIndexes = true
+				fmt.Printf("  - Index on %s field\n", field.Name)
+			}
+		}
+
+		if !hasAssociations && !hasIndexes {
+			fmt.Printf("  - Basic CRUD entity with validation\n")
+		}
+
+		fmt.Printf("  - Soft deletes enabled\n")
+		fmt.Printf("  - JSON serialization ready\n")
+		fmt.Printf("  - Validation tags included\n")
+	}
+
+	return nil
 }
 
 func createSeeder(seederName, tableName, depsStr string) {
@@ -233,10 +329,19 @@ func createSeeder(seederName, tableName, depsStr string) {
 	}
 }
 
-func createModel(modelName, fieldList string) {
+func createModel(modelName, table, fieldList string) {
 	// Generate entity struct name
 	entityName := toPascalCase(modelName)
-	tableName := strings.ToLower(toSnakeCase(entityName)) + "s" // posts, users, etc.
+
+	// Use TABLE parameter if provided, otherwise auto-generate
+	var tableName string
+	if table != "" {
+		tableName = table // Use provided table name
+		fmt.Printf("📋 Using specified table: %s\n", tableName)
+	} else {
+		tableName = strings.ToLower(toSnakeCase(entityName)) + "s" // Auto-generate: posts, users, etc.
+		fmt.Printf("📋 Auto-generated table: %s\n", tableName)
+	}
 
 	fileName := fmt.Sprintf("%s.go", strings.ToLower(entityName))
 
@@ -255,25 +360,13 @@ func createModel(modelName, fieldList string) {
 		os.Exit(1)
 	}
 
-	// Parse fields
-	var parsedFields []Field
-	if fieldList != "" {
-		fieldPairs := strings.Split(fieldList, ",")
-		for _, pair := range fieldPairs {
-			parts := strings.Split(strings.TrimSpace(pair), ":")
-			if len(parts) == 2 {
-				parsedFields = append(parsedFields, Field{
-					Name: strings.TrimSpace(parts[0]),
-					Type: strings.TrimSpace(parts[1]),
-				})
-			}
-		}
-	}
+	// Use enhanced parseFields function (same as migration)
+	parsedFields := parseFields(fieldList)
 
 	// Create entity data
 	data := EntityData{
 		EntityName: entityName,
-		TableName:  tableName,
+		TableName:  tableName, // Use specified or auto-generated table name
 		Fields:     parsedFields,
 	}
 
@@ -295,8 +388,58 @@ func createModel(modelName, fieldList string) {
 	fmt.Printf("✅ Entity created: %s\n", filePath)
 	fmt.Printf("📝 Entity: %s\n", entityName)
 	fmt.Printf("🗂️  Table: %s\n", tableName)
-}
 
+	// Enhanced field summary (same as migration)
+	if len(parsedFields) > 0 {
+		fmt.Printf("📋 Fields:\n")
+		for _, field := range parsedFields {
+			extras := []string{}
+			if field.HasIndex {
+				extras = append(extras, "indexed")
+			}
+			if field.IsForeignKey {
+				extras = append(extras, fmt.Sprintf("FK->%s", field.FKReference))
+			}
+
+			extraStr := ""
+			if len(extras) > 0 {
+				extraStr = fmt.Sprintf(" (%s)", strings.Join(extras, ", "))
+			}
+
+			fmt.Printf("  - %s: %s%s\n", field.Name, field.Type, extraStr)
+		}
+
+		// Show entity features (same as autoCreateEntity)
+		fmt.Printf("📋 Entity Features:\n")
+
+		// Check for associations
+		hasAssociations := false
+		for _, field := range parsedFields {
+			if field.IsForeignKey {
+				hasAssociations = true
+				refEntity := getStructName(field.FKReference)
+				fmt.Printf("  - %s association (belongs to %s)\n", refEntity, refEntity)
+			}
+		}
+
+		// Check for indexes
+		hasIndexes := false
+		for _, field := range parsedFields {
+			if field.HasIndex {
+				hasIndexes = true
+				fmt.Printf("  - Index on %s field\n", field.Name)
+			}
+		}
+
+		if !hasAssociations && !hasIndexes {
+			fmt.Printf("  - Basic CRUD entity with validation\n")
+		}
+
+		fmt.Printf("  - Soft deletes enabled\n")
+		fmt.Printf("  - JSON serialization ready\n")
+		fmt.Printf("  - Validation tags included\n")
+	}
+}
 func createPackage(packageName string) {
 	// Convert to lowercase for package name
 	pkgName := strings.ToLower(packageName)
@@ -585,14 +728,18 @@ type MigrationData struct {
 }
 
 type Field struct {
-	Name string
-	Type string
+	ClassName    string
+	Name         string
+	Type         string
+	HasIndex     bool
+	IsForeignKey bool
+	FKReference  string // table name that reference
 }
 
 type SeederData struct {
 	ClassName    string
 	TableName    string
-	Dependencies []string // เพิ่มฟิลด์นี้
+	Dependencies []string // add this field
 }
 
 type EntityData struct {
@@ -606,6 +753,56 @@ type PackageData struct {
 	EntityName  string
 }
 
+func parseFields(fieldList string) []Field {
+	var parsedFields []Field
+	if fieldList == "" {
+		return parsedFields
+	}
+
+	fieldPairs := strings.Split(fieldList, ",")
+
+	for _, pair := range fieldPairs {
+		// split field_name:type|options - use SplitN to split only the first ":"
+		mainParts := strings.SplitN(strings.TrimSpace(pair), ":", 2)
+		if len(mainParts) < 2 {
+			continue
+		}
+
+		fieldName := strings.TrimSpace(mainParts[0])
+		typeAndOptions := strings.TrimSpace(mainParts[1])
+
+		// split type and options (type|index or type|fk:table)
+		typeParts := strings.Split(typeAndOptions, "|")
+		fieldType := strings.TrimSpace(typeParts[0])
+
+		field := Field{
+			Name:         fieldName,
+			Type:         fieldType,
+			HasIndex:     false,
+			IsForeignKey: false,
+			FKReference:  "",
+		}
+
+		// check options
+		if len(typeParts) > 1 {
+			for i := 1; i < len(typeParts); i++ {
+				option := strings.TrimSpace(typeParts[i])
+
+				if option == "index" {
+					field.HasIndex = true
+				} else if strings.HasPrefix(option, "fk:") {
+					field.IsForeignKey = true
+					field.FKReference = strings.TrimPrefix(option, "fk:")
+				}
+			}
+		}
+
+		parsedFields = append(parsedFields, field)
+	}
+
+	return parsedFields
+}
+
 // Template functions
 var templateFuncs = template.FuncMap{
 	"toSQLType":        toSQLType,
@@ -614,6 +811,10 @@ var templateFuncs = template.FuncMap{
 	"getGormTag":       getGormTag,
 	"getValidationTag": getValidationTag,
 	"hasDecimalField":  hasDecimalField,
+	"getStructName":    getStructName,
+	"hasIndexField":    hasIndexField,
+	"hasFKField":       hasFKField,
+	"toLowerFirst":     toLowerFirst,
 }
 
 func toPascalCase(s string) string {
@@ -698,33 +899,48 @@ func toGoType(fieldType string) string {
 	}
 }
 
-func getGormTag(fieldType string) string {
-	switch strings.ToLower(fieldType) {
+func getGormTag(field Field) string {
+	tags := []string{}
+
+	// Basic type tags
+	switch strings.ToLower(field.Type) {
 	case "string":
-		return "not null"
+		tags = append(tags, "not null")
 	case "text":
-		return "type:text"
+		tags = append(tags, "type:text")
 	case "int", "integer":
-		return "not null"
+		tags = append(tags, "not null")
 	case "int64", "bigint":
-		return "type:bigint;not null"
+		tags = append(tags, "type:bigint", "not null")
 	case "float", "float64":
-		return "type:double precision;not null"
+		tags = append(tags, "type:double precision", "not null")
 	case "decimal":
-		return "type:decimal(10,2);not null"
+		tags = append(tags, "type:decimal(10,2)", "not null")
 	case "bool", "boolean":
-		return "default:false"
+		tags = append(tags, "default:false")
 	case "uuid":
-		return "type:uuid;not null"
+		tags = append(tags, "type:uuid", "not null")
 	case "timestamp", "time":
-		return "type:timestamp with time zone"
+		tags = append(tags, "type:timestamp with time zone")
 	case "date":
-		return "type:date"
+		tags = append(tags, "type:date")
 	case "json", "jsonb":
-		return "type:jsonb;default:'{}'"
+		tags = append(tags, "type:jsonb", "default:'{}'")
 	default:
-		return "not null"
+		tags = append(tags, "not null")
 	}
+
+	// Add index tag
+	if field.HasIndex || field.IsForeignKey {
+		tags = append(tags, "index")
+	}
+
+	// Add foreign key constraint
+	if field.IsForeignKey {
+		tags = append(tags, "constraint:OnUpdate:CASCADE,OnDelete:SET NULL")
+	}
+
+	return strings.Join(tags, ";")
 }
 
 func getValidationTag(fieldType string) string {
@@ -763,6 +979,61 @@ func hasDecimalField(fields []Field) bool {
 		}
 	}
 	return false
+}
+
+func getStructName(tableName string) string {
+	// if table name start with tb_ then remove it
+	tableName = strings.TrimPrefix(tableName, "tb_")
+
+	tableName = singularize(tableName)
+
+	// convert to PascalCase
+	return toPascalCase(tableName)
+}
+
+// singularize convert plural to singular (simple format)
+func singularize(word string) string {
+	// basic rules for English pluralization
+	if strings.HasSuffix(word, "ies") {
+		// categories -> category, companies -> company
+		return strings.TrimSuffix(word, "ies") + "y"
+	}
+	if strings.HasSuffix(word, "es") && len(word) > 2 {
+		// boxes -> box, dishes -> dish
+		return strings.TrimSuffix(word, "es")
+	}
+	if strings.HasSuffix(word, "s") && !strings.HasSuffix(word, "ss") {
+		// users -> user, products -> product (but not address -> addres)
+		return strings.TrimSuffix(word, "s")
+	}
+
+	// if not match any rule then return original word
+	return word
+}
+
+func hasIndexField(fields []Field) bool {
+	for _, field := range fields {
+		if field.HasIndex {
+			return true
+		}
+	}
+	return false
+}
+
+func hasFKField(fields []Field) bool {
+	for _, field := range fields {
+		if field.IsForeignKey {
+			return true
+		}
+	}
+	return false
+}
+
+func toLowerFirst(s string) string {
+	if len(s) == 0 {
+		return s
+	}
+	return strings.ToLower(s[:1]) + s[1:]
 }
 
 // Templates
@@ -806,30 +1077,47 @@ func init() {
 const createTableTemplate = `package migrations
 
 import (
+	"time"
+
+	"github.com/google/uuid"
 	"gorm.io/gorm"
+	{{- if hasDecimalField .Fields}}
+	"github.com/shopspring/decimal"
+	{{- end}}
 )
+
+// {{getStructName .TableName}} entity struct for migration
+type {{getStructName .TableName}} struct {
+	ID        uuid.UUID      ` + "`json:\"id\" gorm:\"type:uuid;primary_key;default:gen_random_uuid()\"`" + `
+	{{- range .Fields}}
+	{{toPascalCase .Name}} {{toGoType .Type}} ` + "`json:\"{{.Name}}\" gorm:\"{{getGormTag .}}\" validate:\"{{getValidationTag .Type}}\"`" + `
+	{{- end}}
+	{{- range .Fields}}
+	{{- if .IsForeignKey}}
+	{{getStructName .FKReference}} {{getStructName .FKReference}} ` + "`json:\"{{getStructName .FKReference | toLowerFirst}},omitempty\" gorm:\"foreignKey:{{toPascalCase .Name}};references:ID\"`" + `
+	{{- end}}
+	{{- end}}
+	CreatedAt time.Time      ` + "`json:\"created_at\"`" + `
+	UpdatedAt time.Time      ` + "`json:\"updated_at\"`" + `
+	DeletedAt gorm.DeletedAt ` + "`json:\"-\" gorm:\"index\"`" + `
+}
+
+// TableName returns the table name for GORM
+func ({{getStructName .TableName}}) TableName() string {
+	return "{{.TableName}}"
+}
 
 // {{.ClassName}} migration - Create {{.TableName}} table
 type {{.ClassName}} struct{}
 
-// Up creates the {{.TableName}} table
+// Up creates the {{.TableName}} table using the {{getStructName .TableName}} struct
 func (m *{{.ClassName}}) Up(db *gorm.DB) error {
-	return db.Exec(` + "`" + `
-		CREATE TABLE {{.TableName}} (
-			id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-			{{- range .Fields}}
-			{{.Name}} {{toSQLType .Type}},
-			{{- end}}
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-			deleted_at TIMESTAMP WITH TIME ZONE
-		)
-	` + "`" + `).Error
+	return db.AutoMigrate(&{{getStructName .TableName}}{})
 }
 
 // Down drops the {{.TableName}} table
 func (m *{{.ClassName}}) Down(db *gorm.DB) error {
-	return db.Exec("DROP TABLE IF EXISTS {{.TableName}}").Error
+	return db.Migrator().DropTable(&{{getStructName .TableName}}{})
 }
 
 // Description returns migration description
@@ -852,16 +1140,30 @@ const alterTableTemplate = `package migrations
 
 import (
 	"gorm.io/gorm"
+	{{- if hasDecimalField .Fields}}
+	"github.com/shopspring/decimal"
+	{{- end}}
 )
 
 // {{.ClassName}} migration - Modify {{.TableName}} table
 type {{.ClassName}} struct{}
 
-// Up modifies the {{.TableName}} table
+{{- range .Fields}}
+// {{.ClassName}}{{toPascalCase .Name}} represents the new column structure
+type {{$.ClassName}}{{toPascalCase .Name}} struct {
+	{{toPascalCase .Name}} {{toGoType .Type}} ` + "`gorm:\"{{getGormTag .}}\"`" + `
+}
+
+func ({{$.ClassName}}{{toPascalCase .Name}}) TableName() string {
+	return "{{$.TableName}}"
+}
+{{- end}}
+
+// Up adds columns to the {{.TableName}} table
 func (m *{{.ClassName}}) Up(db *gorm.DB) error {
 	{{- range .Fields}}
 	// Add {{.Name}} column
-	if err := db.Exec("ALTER TABLE {{$.TableName}} ADD COLUMN {{.Name}} {{toSQLType .Type}}").Error; err != nil {
+	if err := db.Migrator().AddColumn(&{{$.ClassName}}{{toPascalCase .Name}}{}, "{{.Name}}"); err != nil {
 		return err
 	}
 	{{- end}}
@@ -869,11 +1171,11 @@ func (m *{{.ClassName}}) Up(db *gorm.DB) error {
 	return nil
 }
 
-// Down reverts changes to the {{.TableName}} table
+// Down removes columns from the {{.TableName}} table
 func (m *{{.ClassName}}) Down(db *gorm.DB) error {
 	{{- range .Fields}}
 	// Drop {{.Name}} column
-	if err := db.Exec("ALTER TABLE {{$.TableName}} DROP COLUMN IF EXISTS {{.Name}}").Error; err != nil {
+	if err := db.Migrator().DropColumn(&{{$.ClassName}}{{toPascalCase .Name}}{}, "{{.Name}}"); err != nil {
 		return err
 	}
 	{{- end}}
@@ -969,6 +1271,7 @@ func init() {
 }
 `
 
+// Fix entityTemplate - add association fields like createTableTemplate
 const entityTemplate = `package entity
 
 import (
@@ -985,11 +1288,21 @@ import (
 type {{.EntityName}} struct {
 	ID        uuid.UUID      ` + "`json:\"id\" gorm:\"type:uuid;primary_key;default:gen_random_uuid()\"`" + `
 	{{- range .Fields}}
-	{{toPascalCase .Name}} {{toGoType .Type}} ` + "`json:\"{{.Name}}\" gorm:\"{{getGormTag .Type}}\" validate:\"{{getValidationTag .Type}}\"`" + `
+	{{toPascalCase .Name}} {{toGoType .Type}} ` + "`json:\"{{.Name}}\" gorm:\"{{getGormTag .}}\" validate:\"{{getValidationTag .Type}}\"`" + `
+	{{- end}}
+	{{- range .Fields}}
+	{{- if .IsForeignKey}}
+	{{getStructName .FKReference}} {{getStructName .FKReference}} ` + "`json:\"{{getStructName .FKReference | toLowerFirst}},omitempty\" gorm:\"foreignKey:{{toPascalCase .Name}};references:ID\"`" + `
+	{{- end}}
 	{{- end}}
 	CreatedAt time.Time      ` + "`json:\"created_at\"`" + `
 	UpdatedAt time.Time      ` + "`json:\"updated_at\"`" + `
 	DeletedAt gorm.DeletedAt ` + "`json:\"-\" gorm:\"index\"`" + `
+}
+
+// TableName returns the table name for GORM
+func ({{.EntityName}}) TableName() string {
+	return "{{.TableName}}"
 }
 
 // Create{{.EntityName}}Request represents a request to create a {{.EntityName}}
@@ -1018,10 +1331,7 @@ type {{.EntityName}}Filter struct {
 	Limit  int    ` + "`form:\"limit\" validate:\"min=1,max=100\"`" + `
 }
 
-// TableName returns the table name for GORM
-func ({{.EntityName}}) TableName() string {
-	return "{{.TableName}}"
-}
+
 `
 
 // Package templates - Simple structure without CRUD

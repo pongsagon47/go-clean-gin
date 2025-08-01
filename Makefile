@@ -134,9 +134,9 @@ build-artisan:
 
 ## Create new migration file
 make-migration:
-	@if [ -z "$(NAME)" ]; then \
+	@if [ -z "$(NAME)" ] || [ -z "$(TABLE)" ]; then \
 		echo "❌ Error: NAME is required"; \
-		echo "Usage: make make-migration NAME=migration_name [CREATE=true] [TABLE=table_name] [FIELDS=\"field1:type1,field2:type2\"]"; \
+		echo "Usage: make make-migration NAME=migration_name TABLE=table_name [CREATE=true]  [FIELDS=\"field1:type1,field2:type2\"]"; \
 		echo ""; \
 		echo "Examples:"; \
 		echo "  make make-migration NAME=create_users_table CREATE=true TABLE=users FIELDS=\"name:string,email:string\""; \
@@ -170,14 +170,16 @@ make-seeder:
 make-entity:
 	@if [ -z "$(NAME)" ]; then \
 		echo "❌ Error: NAME is required"; \
-		echo "Usage: make make-entity NAME=ModelName [FIELDS=\"field1:type1,field2:type2\"]"; \
+		echo "Usage: make make-entity NAME=ModelName [TABLE=table_name] [FIELDS=\"field1:type1|index|fk:table,field2:type2\"]"; \
 		echo ""; \
-		echo "Example:"; \
-		echo "  make make-entity NAME=User FIELDS=\"name:string,email:string,age:int\""; \
+		echo "Examples:"; \
+		echo "  make make-entity NAME=User FIELDS=\"name:string,email:string\""; \
+		echo "  make make-entity NAME=Post TABLE=tb_posts FIELDS=\"title:string|index,user_id:uuid|fk:tb_users\""; \
 		exit 1; \
 	fi
 	@echo "📋 Creating entity: $(NAME)"
 	@$(ARTISAN_CMD) -action=make:model -name="$(NAME)" \
+		$(if $(TABLE),-table="$(TABLE)") \
 		$(if $(FIELDS),-fields="$(FIELDS)")
 
 ## Create new package with handler, usecase, repository, port
@@ -195,22 +197,23 @@ make-package:
 
 ## Create model with migration and seeder (complete stack)
 make-model:
-	@if [ -z "$(NAME)" ]; then \
-		echo "❌ Error: NAME is required"; \
-		echo "Usage: make make-model NAME=ModelName [FIELDS=\"field1:type1,field2:type2\"]"; \
+	@if [ -z "$(NAME)" ] || [ -z "$(TABLE)" ]; then \
+		echo "❌ Error: NAME and TABLE are required"; \
+		echo "Usage: make make-model NAME=ModelName TABLE=table_name [FIELDS=\"field1:type1,field2:type2\"]"; \
 		echo ""; \
 		echo "Example:"; \
-		echo "  make make-model NAME=User FIELDS=\"name:string,email:string,age:int\""; \
+		echo "  make make-model NAME=User TABLE=tb_users FIELDS=\"name:string,email:string,age:int\""; \
 		exit 1; \
 	fi
 	@echo "🏗️  Creating complete model stack for: $(NAME)"
 	@echo "📋 Step 1: Creating entity struct..."
 	@$(ARTISAN_CMD) -action=make:model -name="$(NAME)" \
+		$(if $(TABLE),-table="$(TABLE)") \
 		$(if $(FIELDS),-fields="$(FIELDS)")
 	@echo "📄 Step 2: Creating migration..."
-	@$(MAKE) make-migration NAME=create_$(shell echo $(NAME) | tr '[:upper:]' '[:lower:]')s_table CREATE=true TABLE=$(shell echo $(NAME) | tr '[:upper:]' '[:lower:]')s FIELDS="$(FIELDS)"
+	@$(MAKE) make-migration NAME=create_$(shell echo $(NAME) | tr '[:upper:]' '[:lower:]')s_table CREATE=true TABLE=$(TABLE) FIELDS="$(FIELDS)"
 	@echo "🌱 Step 3: Creating seeder..."
-	@$(MAKE) make-seeder NAME=$(NAME)Seeder TABLE=$(shell echo $(NAME) | tr '[:upper:]' '[:lower:]')s
+	@$(MAKE) make-seeder NAME=$(NAME)Seeder TABLE=$(TABLE)
 	@echo "✅ Complete model stack created successfully!"
 	@echo "📁 Files created:"
 	@echo "  - internal/entity/$(shell echo $(NAME) | tr '[:upper:]' '[:lower:]').go (Entity struct)"
@@ -451,19 +454,19 @@ examples:
 	@echo ""
 	@echo "📦 Creating Complete Features:"
 	@echo "  # Create complete blog system in 3 commands"
-	@echo "  make make-model NAME=Post FIELDS=\"title:string,content:text,author_id:uuid,status:string\""
+	@echo "  make make-model NAME=Post TABLE=tb_posts FIELDS=\"title:string,content:text,author_id:uuid,status:string\""
 	@echo "  make make-package NAME=Post"
 	@echo "  make migrate && make db-seed"
 	@echo ""
 	@echo "🏗️  Creating Individual Components:"
 	@echo "  # Create just entity"
-	@echo "  make make-entity NAME=User FIELDS=\"name:string,email:string,age:int\""
+	@echo "  make make-entity NAME=User TABLE=tb_users FIELDS=\"name:string,email:string,age:int\""
 	@echo ""
 	@echo "  # Create just package structure"
 	@echo "  make make-package NAME=Product"
 	@echo ""
 	@echo "  # Create table migration"
-	@echo "  make make-migration NAME=create_posts_table CREATE=true TABLE=posts FIELDS=\"title:string,content:text\""
+	@echo "  make make-migration NAME=create_posts_table CREATE=true TABLE=tb_posts FIELDS=\"title:string,content:text\""
 	@echo ""
 	@echo "📝 Adding Columns & Indexes:"
 	@echo "  make add-column TABLE=users COLUMN=phone TYPE=string"
@@ -473,8 +476,8 @@ examples:
 	@echo ""
 	@echo "🌱 Seeding & Migration (with Dependencies):"
 	@echo "  # Create seeders with dependencies"
-	@echo "  make make-seeder NAME=UserSeeder TABLE=users"
-	@echo "  make make-seeder NAME=ProductSeeder TABLE=products DEPS=\"UserSeeder\""
+	@echo "  make make-seeder NAME=UserSeeder TABLE=tb_users"
+	@echo "  make make-seeder NAME=ProductSeeder TABLE=tb_products DEPS=\"UserSeeder\""
 	@echo "  make make-seeder NAME=OrderSeeder DEPS=\"UserSeeder,ProductSeeder\""
 	@echo ""
 	@echo "  # Run seeders (automatic dependency resolution)"
@@ -499,9 +502,9 @@ examples:
 	@echo "  make build-artisan"
 	@echo ""
 	@echo "  # 2. Create models with proper seeder dependencies"
-	@echo "  make make-model NAME=User FIELDS=\"name:string,email:string\""
-	@echo "  make make-model NAME=Category FIELDS=\"name:string,description:text\""
-	@echo "  make make-model NAME=Product FIELDS=\"name:string,price:decimal,category_id:uuid\""
+	@echo "  make make-model NAME=User TABLE=tb_users FIELDS=\"name:string,email:string\""
+	@echo "  make make-model NAME=Category TABLE=tb_categories FIELDS=\"name:string,description:text\""
+	@echo "  make make-model NAME=Product TABLE=tb_products FIELDS=\"name:string,price:decimal,category_id:uuid\""
 	@echo ""
 	@echo "  # 3. Create seeders with dependencies"
 	@echo "  make make-seeder NAME=UserSeeder TABLE=users"
